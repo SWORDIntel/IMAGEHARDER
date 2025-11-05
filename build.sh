@@ -3,7 +3,7 @@ set -e
 
 # Toolchain: clang (for CET/CFI options on x86_64); you can use GCC if you prefer
 sudo apt-get update && sudo apt-get install -y build-essential clang cmake nasm \
-  autoconf automake libtool git pkg-config libseccomp-dev
+  autoconf automake libtool git pkg-config libseccomp-dev librsvg2-dev
 
 # Common hardening flags (prod)
 export CFLAGS="-O2 -pipe -fstack-protector-strong -D_FORTIFY_SOURCE=3 \
@@ -12,10 +12,10 @@ export CFLAGS="-O2 -pipe -fstack-protector-strong -D_FORTIFY_SOURCE=3 \
 export CXXFLAGS="$CFLAGS"
 export LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack,-z,separate-code -pie"
 
+# Initialize submodules
+git submodule update --init --recursive
+
 # 1) libjpeg-turbo (API/ABI compatible with libjpeg, faster)
-if [ ! -d "libjpeg-turbo" ]; then
-  git clone https://github.com/libjpeg-turbo/libjpeg-turbo.git
-fi
 cd libjpeg-turbo && mkdir -p build && cd build
 cmake -G"Unix Makefiles" .. \
   -DCMAKE_INSTALL_PREFIX=/usr/local \
@@ -28,9 +28,6 @@ make -j"$(nproc)" && sudo make install
 cd ../..
 
 # 2) libpng (hardened)
-if [ ! -d "libpng" ]; then
-  git clone https://github.com/glennrp/libpng.git
-fi
 cd libpng
 make clean || true
 ./autogen.sh

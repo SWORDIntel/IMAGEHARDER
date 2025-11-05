@@ -1,4 +1,4 @@
-use image_harden::{decode_jpeg, decode_png, ImageHardenError};
+use image_harden::{decode_jpeg, decode_png, decode_svg, ImageHardenError};
 use libseccomp_rs::{ScmpAction, ScmpFilterContext, ScmpSyscall};
 use nix::sched::{clone, CloneFlags};
 use nix::sys::wait::{waitpid, WaitStatus};
@@ -22,9 +22,15 @@ fn main() {
     const STACK_SIZE: usize = 1024 * 1024;
     let mut stack = [0; STACK_SIZE];
 
+    let image_path = &args[1];
+    let file_extension = Path::new(image_path)
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+
     let child_pid = unsafe {
         clone(
-            Box::new(|| child_process(&args[1], &mut write_pipe)),
+            Box::new(|| child_process(image_path, file_extension, &mut write_pipe)),
             &mut stack,
             CloneFlags::CLONE_NEWPID | CloneFlags::CLONE_NEWNET | CloneFlags::CLONE_NEWNS,
             None,
@@ -44,8 +50,13 @@ fn main() {
     }
 }
 
-fn child_process(image_path: &str, write_pipe: &mut File) -> isize {
-    apply_seccomp_filter().unwrap();
+fn child_process(image_path: &str, file_extension: &str, write_pipe: &mut File) -> isize {
+    let seccomp_filter = match file_extension {
+        "svg" => apply_svg_seccomp_filter(),
+        _ => apply_seccomp_filter(),
+    };
+    seccomp_filter.unwrap();
+
     match decode_image(image_path) {
         Ok(decoded_image_len) => {
             write_pipe
@@ -69,6 +80,7 @@ fn decode_image(image_path: &str) -> Result<usize, ImageHardenError> {
     let result = match path.extension().and_then(|s| s.to_str()) {
         Some("png") => decode_png(&buffer),
         Some("jpg") | Some("jpeg") => decode_jpeg(&buffer),
+        Some("svg") => decode_svg(&buffer),
         _ => {
             return Err(ImageHardenError::JpegError("Unsupported file type".to_string()));
         }
@@ -87,6 +99,24 @@ fn apply_seccomp_filter() -> Result<(), Box<dyn std::error::Error>> {
     filter.add_rule(ScmpAction::Allow, ScmpSyscall::brk)?;
     filter.add_rule(ScmpAction::Allow, ScmpSyscall::mmap)?;
     filter.add_rule(ScmpAction::Allow, ScmpSyscall::exit_group)?;
+
+    filter.load()?;
+
+    Ok(())
+}
+
+fn apply_svg_seccomp_filter() -> Result<(), Box<dyn std::error::Error>> {
+    let mut filter = ScmpFilterContext::new_filter(ScmpAction::KillProcess)?;
+
+    filter.add_rule(ScmpAction::Allow, ScmpSyscall::read)?;
+    filter.add_rule(ScmpAction::Allow, ScmpSyscall::write)?;
+    filter.add_rule(ScmpAction::Allow, ScmpSyscall::open)?;
+    filter.add_rule(ScmpAction::Allow, ScmpSyscall::close)?;
+    filter.add_rule(ScmpAction::Allow, ScmpSyscall::brk)?;
+    filter.add_rule(ScmpAction::Allow, ScmpSyscall::mmap)?;
+    filter.add_rule(ScmpAction::Allow, ScmpSyscall::exit_group)?;
+    filter.add_rule(ScmpAction::Allow, ScmpSyscall::munmap)?;
+    filter.add_rule(ScmpAction::Allow, ScmpSyscall::mremap)?;
 
     filter.load()?;
 

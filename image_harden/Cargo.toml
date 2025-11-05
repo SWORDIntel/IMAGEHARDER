@@ -7,6 +7,8 @@ edition = "2021"
 thiserror = "1.0"
 libseccomp-rs = "0.1"
 nix = { version = "0.27", features = ["sched", "process"] }
+librsvg = "2.54.5"
+ammonia = "3.3.0"
 
 [build-dependencies]
 bindgen = "0.69"
