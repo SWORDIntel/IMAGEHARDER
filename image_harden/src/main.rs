@@ -1,4 +1,5 @@
 use image_harden::{decode_jpeg, decode_png, decode_svg, decode_video, ImageHardenError};
+use image_harden::{decode_jpeg, decode_png, decode_svg, ImageHardenError};
 use libseccomp_rs::{ScmpAction, ScmpFilterContext, ScmpSyscall};
 use nix::sched::{clone, CloneFlags};
 use nix::sys::wait::{waitpid, WaitStatus};
