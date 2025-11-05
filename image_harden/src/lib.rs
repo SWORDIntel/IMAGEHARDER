@@ -176,6 +176,7 @@ pub fn decode_video(data: &[u8], wasm_path: &str) -> Result<Vec<u8>, ImageHarden
     let engine = Engine::default();
     let mut linker = Linker::new(&engine);
     wasmtime_wasi::add_to_linker(&mut linker, |s| s).map_err(|e| ImageHardenError::VideoError(e.to_string()))?;
+    wasmtime_wasi::add_to_linker(&mut linker, |s| s).unwrap();
 
     let wasi = WasiCtxBuilder::new()
         .stdin(Box::new(wasmtime_wasi::pipe::ReadPipe::from_slice(data)))
@@ -195,6 +196,17 @@ pub fn decode_video(data: &[u8], wasm_path: &str) -> Result<Vec<u8>, ImageHarden
         .map_err(|e| ImageHardenError::VideoError(e.to_string()))?
         .call(&mut store, ())
         .map_err(|e| ImageHardenError::VideoError(e.to_string()))?;
+    let module = Module::from_file(&engine, wasm_path).unwrap();
+    linker
+        .module(&mut store, "", &module)
+        .unwrap();
+    linker
+        .get_default(&mut store, "")
+        .unwrap()
+        .typed::<(), ()>(&store)
+        .unwrap()
+        .call(&mut store, ())
+        .unwrap();
 
     let mut stdout_buf = Vec::new();
     store
@@ -206,6 +218,7 @@ pub fn decode_video(data: &[u8], wasm_path: &str) -> Result<Vec<u8>, ImageHarden
         .unwrap()
         .read_to_end(&mut stdout_buf)
         .map_err(|e| ImageHardenError::VideoError(e.to_string()))?;
+        .unwrap();
     Ok(stdout_buf)
 }
 

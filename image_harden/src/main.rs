@@ -1,5 +1,6 @@
 use image_harden::{decode_jpeg, decode_png, decode_svg, decode_video, ImageHardenError};
 use landlock::{Access, Landlock, PathFd, Ruleset};
+use image_harden::{decode_jpeg, decode_png, decode_svg, ImageHardenError};
 use libseccomp_rs::{ScmpAction, ScmpFilterContext, ScmpSyscall};
 use nix::sched::{clone, CloneFlags};
 use nix::sys::wait::{waitpid, WaitStatus};
@@ -88,6 +89,7 @@ fn decode_image(image_path: &str) -> Result<usize, ImageHardenError> {
             let wasm_path = env::var("FFMPEG_WASM_PATH").unwrap_or("../ffmpeg.wasm".to_string());
             decode_video(&buffer, &wasm_path)
         }
+        Some("mp4") => decode_video(&buffer),
         _ => {
             return Err(ImageHardenError::JpegError("Unsupported file type".to_string()));
         }
