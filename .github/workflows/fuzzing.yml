@@ -22,3 +22,5 @@ jobs:
         run: cd image_harden && cargo fuzz run fuzz_png -- -max_total_time=60s
       - name: Fuzz JPEG
         run: cd image_harden && cargo fuzz run fuzz_jpeg -- -max_total_time=60s
+      - name: Fuzz SVG
+        run: cd image_harden && cargo fuzz run fuzz_svg -- -max_total_time=60s

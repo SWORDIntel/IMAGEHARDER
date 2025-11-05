@@ -29,7 +29,7 @@ cd ../..
 
 # 2) libpng (hardened)
 cd libpng
-make clean || true
+make distclean || true
 ./autogen.sh
 ./configure CC=clang CFLAGS="$CFLAGS -DPNG_SAFE_LIMITS_SUPPORTED" LDFLAGS="$LDFLAGS" --disable-shared --enable-static --disable-hardware-optimizations
 make -j"$(nproc)" && sudo make install
