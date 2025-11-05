@@ -17,7 +17,7 @@ ImageHarden is a system for hardening image decoding libraries on Debian-based s
 
 ### Prerequisites
 
--   A Debian-based system (e.g., Ubuntu)
+-   A Debian-based system (e.g., Ubuntu) with a modern kernel (5.13+ for Landlock)
 -   `build-essential`, `clang`, `cmake`, `nasm`, `autoconf`, `automake`, `libtool`, `git`, `pkg-config`, `librsvg2-dev`
 -   The Rust toolchain
 
@@ -116,6 +116,11 @@ ImageHarden is designed to provide a secure-by-default image decoding solution. 
 
 ### Sandboxing
 
+The `image_harden_cli` demonstration binary uses a combination of kernel namespaces, `seccomp-bpf`, and Landlock to create a sandboxed environment for image decoding. This provides an additional layer of security by isolating the decoding process from the rest of the system.
+
+-   **Kernel Namespaces**: The decoding process is run in new PID, network, and mount namespaces. This means it has its own process tree, no network access, and a private filesystem view.
+-   **`seccomp-bpf`**: A strict `seccomp-bpf` filter is applied to the decoding process, limiting the available system calls to only those that are absolutely necessary for decoding an image. Three different `seccomp` profiles are used: a general profile for PNG and JPEG decoding, a more restrictive profile for SVG decoding, and a profile for the Wasm runtime.
+-   **Landlock**: A Landlock ruleset is applied to the decoding process, restricting its filesystem access to only the input file. This prevents a compromised decoder from accessing any other files on the system.
 The `image_harden_cli` demonstration binary uses a combination of kernel namespaces and `seccomp-bpf` to create a sandboxed environment for image decoding. This provides an additional layer of security by isolating the decoding process from the rest of the system.
 
 -   **Kernel Namespaces**: The decoding process is run in new PID, network, and mount namespaces. This means it has its own process tree, no network access, and a private filesystem view.

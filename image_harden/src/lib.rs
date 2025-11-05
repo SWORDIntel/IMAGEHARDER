@@ -175,6 +175,7 @@ pub fn decode_svg(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
 pub fn decode_video(data: &[u8], wasm_path: &str) -> Result<Vec<u8>, ImageHardenError> {
     let engine = Engine::default();
     let mut linker = Linker::new(&engine);
+    wasmtime_wasi::add_to_linker(&mut linker, |s| s).map_err(|e| ImageHardenError::VideoError(e.to_string()))?;
     wasmtime_wasi::add_to_linker(&mut linker, |s| s).unwrap();
 
     let wasi = WasiCtxBuilder::new()
@@ -184,6 +185,17 @@ pub fn decode_video(data: &[u8], wasm_path: &str) -> Result<Vec<u8>, ImageHarden
         .build();
     let mut store = Store::new(&engine, wasi);
 
+    let module = Module::from_file(&engine, wasm_path).map_err(|e| ImageHardenError::VideoError(e.to_string()))?;
+    linker
+        .module(&mut store, "", &module)
+        .map_err(|e| ImageHardenError::VideoError(e.to_string()))?;
+    linker
+        .get_default(&mut store, "")
+        .map_err(|e| ImageHardenError::VideoError(e.to_string()))?
+        .typed::<(), ()>(&store)
+        .map_err(|e| ImageHardenError::VideoError(e.to_string()))?
+        .call(&mut store, ())
+        .map_err(|e| ImageHardenError::VideoError(e.to_string()))?;
     let module = Module::from_file(&engine, wasm_path).unwrap();
     linker
         .module(&mut store, "", &module)
@@ -205,6 +217,7 @@ pub fn decode_video(data: &[u8], wasm_path: &str) -> Result<Vec<u8>, ImageHarden
         .try_clone()
         .unwrap()
         .read_to_end(&mut stdout_buf)
+        .map_err(|e| ImageHardenError::VideoError(e.to_string()))?;
         .unwrap();
     Ok(stdout_buf)
 }
