@@ -1,0 +1,17 @@
+[package]
+name = "image_harden"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+png = "0.17"
+jpeg-decoder = "0.3"
+thiserror = "1.0"
+
+[build-dependencies]
+bindgen = "0.69"
+cc = "1.0"
+
+[[bin]]
+name = "image_harden_cli"
+path = "src/main.rs"

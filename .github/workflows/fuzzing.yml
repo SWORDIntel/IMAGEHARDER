@@ -1,0 +1,24 @@
+name: Fuzzing
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Install dependencies
+        run: ./build.sh
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+      - name: Fuzz PNG
+        run: cd image_harden && cargo fuzz run fuzz_png -- -max_total_time=60s
+      - name: Fuzz JPEG
+        run: cd image_harden && cargo fuzz run fuzz_jpeg -- -max_total_time=60s
