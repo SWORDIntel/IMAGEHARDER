@@ -1,5 +1,4 @@
 use image_harden::{decode_jpeg, decode_png, decode_svg, decode_video, ImageHardenError};
-use image_harden::{decode_jpeg, decode_png, decode_svg, ImageHardenError};
 use libseccomp_rs::{ScmpAction, ScmpFilterContext, ScmpSyscall};
 use nix::sched::{clone, CloneFlags};
 use nix::sys::wait::{waitpid, WaitStatus};
@@ -83,7 +82,7 @@ fn decode_image(image_path: &str) -> Result<usize, ImageHardenError> {
         Some("png") => decode_png(&buffer),
         Some("jpg") | Some("jpeg") => decode_jpeg(&buffer),
         Some("svg") => decode_svg(&buffer),
-        Some("mp4") => decode_video(&buffer),
+        Some("mp4") => decode_video(&buffer, "../ffmpeg.wasm"),
         _ => {
             return Err(ImageHardenError::JpegError("Unsupported file type".to_string()));
         }

@@ -11,6 +11,8 @@ use thiserror::Error;
 use librsvg::SvgHandle;
 use ammonia::clean;
 use cairo;
+use wasmtime::*;
+use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
 
 #[derive(Debug, Error)]
 pub enum ImageHardenError {
@@ -20,6 +22,8 @@ pub enum ImageHardenError {
     JpegError(String),
     #[error("SVG decoding failed: {0}")]
     SvgError(String),
+    #[error("Video decoding failed: {0}")]
+    VideoError(String),
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
     #[error("Null pointer encountered")]
@@ -166,6 +170,45 @@ pub fn decode_svg(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
     surface.write_to_png(&mut png_data).map_err(|e| ImageHardenError::SvgError(e.to_string()))?;
     Ok(png_data)
 }
+
+// Video wrapper
+pub fn decode_video(data: &[u8], wasm_path: &str) -> Result<Vec<u8>, ImageHardenError> {
+    let engine = Engine::default();
+    let mut linker = Linker::new(&engine);
+    wasmtime_wasi::add_to_linker(&mut linker, |s| s).unwrap();
+
+    let wasi = WasiCtxBuilder::new()
+        .stdin(Box::new(wasmtime_wasi::pipe::ReadPipe::from_slice(data)))
+        .stdout(Box::new(wasmtime_wasi::pipe::WritePipe::new_in_memory()))
+        .inherit_stderr()
+        .build();
+    let mut store = Store::new(&engine, wasi);
+
+    let module = Module::from_file(&engine, wasm_path).unwrap();
+    linker
+        .module(&mut store, "", &module)
+        .unwrap();
+    linker
+        .get_default(&mut store, "")
+        .unwrap()
+        .typed::<(), ()>(&store)
+        .unwrap()
+        .call(&mut store, ())
+        .unwrap();
+
+    let mut stdout_buf = Vec::new();
+    store
+        .data_mut()
+        .stdout()
+        .as_mut()
+        .unwrap()
+        .try_clone()
+        .unwrap()
+        .read_to_end(&mut stdout_buf)
+        .unwrap();
+    Ok(stdout_buf)
+}
+
 
 extern "C" fn error_fn(png_ptr: png_structp, error_msg: png_const_charp) {
     let msg = unsafe { CStr::from_ptr(error_msg).to_string_lossy().into_owned() };
