@@ -1,0 +1,22 @@
+[package]
+name = "image_harden"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+thiserror = "1.0"
+libseccomp-rs = "0.1"
+nix = { version = "0.27", features = ["sched", "process"] }
+librsvg = "2.54.5"
+ammonia = "3.3.0"
+wasmtime = "0.39"
+wasmtime-wasi = "0.39"
+landlock = "0.1"
+
+[build-dependencies]
+bindgen = "0.69"
+cc = "1.0"
+
+[[bin]]
+name = "image_harden_cli"
+path = "src/main.rs"
