@@ -1,6 +1,6 @@
 # ImageHarden
 
-ImageHarden is a system for hardening image decoding libraries on Debian-based systems. It provides a set of scripts and a Rust library to build and use hardened versions of `libpng`, `libjpeg-turbo`, `librsvg`, and `ffmpeg`, reducing the risk of remote code execution vulnerabilities in image decoding.
+ImageHarden is a system for hardening image decoding libraries on Debian-based systems. It provides a set of scripts and a Rust library to build and use hardened versions of `libpng`, `libjpeg-turbo`, and `librsvg`, reducing the risk of remote code execution vulnerabilities in image decoding.
 
 ## Features
 
@@ -9,7 +9,7 @@ ImageHarden is a system for hardening image decoding libraries on Debian-based s
 -   **Fail-Closed Error Handling**: The library is designed to fail closed, meaning that any error during the decoding process will result in a clear and immediate failure, rather than continuing with potentially corrupted data.
 -   **CI Fuzzing**: The project includes a continuous integration setup with `cargo-fuzz` to continuously test the hardened libraries and Rust wrappers for vulnerabilities.
 -   **Safe Rust Wrappers**: The Rust library provides a safe, idiomatic API for decoding images, abstracting away the complexities of the underlying C libraries and their FFI.
--   **Kernel-Level Sandboxing**: The demonstration binary uses `seccomp-bpf`, kernel namespaces, and Landlock to create a secure, isolated environment for image decoding.
+-   **Kernel-Level Sandboxing**: The demonstration binary uses `seccomp-bpf` and kernel namespaces to create a secure, isolated environment for image decoding.
 -   **SVG Sanitization**: SVG files are sanitized with `ammonia` to remove potentially malicious content before being rendered.
 -   **FFmpeg Wasm Sandboxing**: FFmpeg is compiled to WebAssembly and run in a secure, sandboxed environment using the `wasmtime` runtime.
 
@@ -17,7 +17,7 @@ ImageHarden is a system for hardening image decoding libraries on Debian-based s
 
 ### Prerequisites
 
--   A Debian-based system (e.g., Ubuntu) with a modern kernel (5.13+ for Landlock). For instructions on how to configure your kernel, see the [Kernel Configuration Guide](KERNEL_BUILD.md).
+-   A Debian-based system (e.g., Ubuntu) with a modern kernel (5.13+ for Landlock)
 -   `build-essential`, `clang`, `cmake`, `nasm`, `autoconf`, `automake`, `libtool`, `git`, `pkg-config`, `librsvg2-dev`
 -   The Rust toolchain
 
@@ -48,6 +48,9 @@ The `build_ffmpeg_wasm.sh` script automates the process of compiling a minimal, 
 ### Using the Rust Library
 
 The `image_harden` Rust library provides four main functions for decoding media: `decode_png`, `decode_jpeg`, `decode_svg`, and `decode_video`. These functions take a byte slice of the media data and return a `Result` containing either the decoded data or an `ImageHardenError`.
+### Using the Rust Library
+
+The `image_harden` Rust library provides three main functions for decoding images: `decode_png`, `decode_jpeg`, and `decode_svg`. These functions take a byte slice of the image data and return a `Result` containing either the decoded image data or an `ImageHardenError`.
 
 To use the library, add it as a dependency to your `Cargo.toml`:
 
@@ -60,6 +63,7 @@ Then, you can use the functions as follows:
 
 ```rust
 use image_harden::{decode_video, ImageHardenError};
+use image_harden::{decode_svg, ImageHardenError};
 use std::fs::File;
 use std::io::Read;
 
@@ -71,6 +75,13 @@ fn main() -> Result<(), ImageHardenError> {
     let decoded_video = decode_video(&buffer)?;
 
     println!("Successfully decoded video with size: {}", decoded_video.len());
+    let mut file = File::open("my_image.svg")?;
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)?;
+
+    let decoded_image = decode_svg(&buffer)?;
+
+    println!("Successfully decoded image with size: {}", decoded_image.len());
 
     Ok(())
 }
@@ -84,6 +95,7 @@ The project includes a demonstration binary, `image_harden_cli`, which can be us
 cd image_harden
 cargo build
 ./target/debug/image_harden_cli /path/to/your/video.mp4
+./target/debug/image_harden_cli /path/to/your/image.svg
 ```
 
 ### Fuzzing
@@ -109,5 +121,10 @@ The `image_harden_cli` demonstration binary uses a combination of kernel namespa
 -   **Kernel Namespaces**: The decoding process is run in new PID, network, and mount namespaces. This means it has its own process tree, no network access, and a private filesystem view.
 -   **`seccomp-bpf`**: A strict `seccomp-bpf` filter is applied to the decoding process, limiting the available system calls to only those that are absolutely necessary for decoding an image. Three different `seccomp` profiles are used: a general profile for PNG and JPEG decoding, a more restrictive profile for SVG decoding, and a profile for the Wasm runtime.
 -   **Landlock**: A Landlock ruleset is applied to the decoding process, restricting its filesystem access to only the input file. This prevents a compromised decoder from accessing any other files on the system.
+The `image_harden_cli` demonstration binary uses a combination of kernel namespaces and `seccomp-bpf` to create a sandboxed environment for image decoding. This provides an additional layer of security by isolating the decoding process from the rest of the system.
+
+-   **Kernel Namespaces**: The decoding process is run in new PID, network, and mount namespaces. This means it has its own process tree, no network access, and a private filesystem view.
+-   **`seccomp-bpf`**: A strict `seccomp-bpf` filter is applied to the decoding process, limiting the available system calls to only those that are absolutely necessary for decoding an image. Three different `seccomp` profiles are used: a general profile for PNG and JPEG decoding, a more restrictive profile for SVG decoding, and a profile for the Wasm runtime.
+-   **`seccomp-bpf`**: A strict `seccomp-bpf` filter is applied to the decoding process, limiting the available system calls to only those that are absolutely necessary for decoding an image. Two different `seccomp` profiles are used: a general profile for PNG and JPEG decoding, and a more restrictive profile for SVG decoding.
 
 This sandboxing approach significantly reduces the attack surface and makes it much more difficult for a compromised decoder to have any impact on the host system.

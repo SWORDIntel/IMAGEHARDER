@@ -1,6 +1,4 @@
 use image_harden::{decode_jpeg, decode_png, decode_svg, decode_video, ImageHardenError};
-use landlock::{Access, Landlock, PathFd, Ruleset};
-use image_harden::{decode_jpeg, decode_png, decode_svg, ImageHardenError};
 use libseccomp_rs::{ScmpAction, ScmpFilterContext, ScmpSyscall};
 use nix::sched::{clone, CloneFlags};
 use nix::sys::wait::{waitpid, WaitStatus};
@@ -53,7 +51,6 @@ fn main() {
 }
 
 fn child_process(image_path: &str, file_extension: &str, write_pipe: &mut File) -> isize {
-    apply_landlock_rules(image_path).unwrap();
     let seccomp_filter = match file_extension {
         "svg" => apply_svg_seccomp_filter(),
         "mp4" => apply_video_seccomp_filter(),
@@ -85,25 +82,13 @@ fn decode_image(image_path: &str) -> Result<usize, ImageHardenError> {
         Some("png") => decode_png(&buffer),
         Some("jpg") | Some("jpeg") => decode_jpeg(&buffer),
         Some("svg") => decode_svg(&buffer),
-        Some("mp4") => {
-            let wasm_path = env::var("FFMPEG_WASM_PATH").unwrap_or("../ffmpeg.wasm".to_string());
-            decode_video(&buffer, &wasm_path)
-        }
-        Some("mp4") => decode_video(&buffer),
+        Some("mp4") => decode_video(&buffer, "../ffmpeg.wasm"),
         _ => {
             return Err(ImageHardenError::JpegError("Unsupported file type".to_string()));
         }
     };
 
     result.map(|data| data.len())
-}
-
-fn apply_landlock_rules(path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let ruleset = Ruleset::new()
-        .handle_access(Access::FsReadFile)?
-        .restrict_path(&PathFd::new(path)?)?;
-    Landlock::new(ruleset).enforce()?;
-    Ok(())
 }
 
 fn apply_seccomp_filter() -> Result<(), Box<dyn std::error::Error>> {
