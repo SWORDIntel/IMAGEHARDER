@@ -121,7 +121,7 @@ pub fn decode_jpeg(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
         for m in 0xE0..=0xEF {
             jpeg_save_markers(&mut cinfo, m, 0);
         }
-        jpeg_save_markers(&mut cinfo, JPEG_COM, 0);
+        jpeg_save_markers(&mut cinfo, JPEG_COM as i32, 0);
 
 
         jpeg_mem_src(&mut cinfo, data.as_ptr(), data.len() as u64);
