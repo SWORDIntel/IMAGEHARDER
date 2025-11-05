@@ -3,7 +3,7 @@ set -e
 
 # Toolchain: clang (for CET/CFI options on x86_64); you can use GCC if you prefer
 sudo apt-get update && sudo apt-get install -y build-essential clang cmake nasm \
-  autoconf automake libtool git pkg-config
+  autoconf automake libtool git pkg-config libseccomp-dev
 
 # Common hardening flags (prod)
 export CFLAGS="-O2 -pipe -fstack-protector-strong -D_FORTIFY_SOURCE=3 \

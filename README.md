@@ -9,6 +9,7 @@ ImageHarden is a system for hardening image decoding libraries on Debian-based s
 -   **Fail-Closed Error Handling**: The library is designed to fail closed, meaning that any error during the decoding process will result in a clear and immediate failure, rather than continuing with potentially corrupted data.
 -   **CI Fuzzing**: The project includes a continuous integration setup with `cargo-fuzz` to continuously test the hardened libraries and Rust wrappers for vulnerabilities.
 -   **Safe Rust Wrappers**: The Rust library provides a safe, idiomatic API for decoding images, abstracting away the complexities of the underlying C libraries and their FFI.
+-   **Kernel-Level Sandboxing**: The demonstration binary uses `seccomp-bpf` and kernel namespaces to create a secure, isolated environment for image decoding.
 
 ## Getting Started
 
@@ -84,3 +85,12 @@ The fuzz tests are also integrated into the CI pipeline and will run automatical
 ## Security
 
 ImageHarden is designed to provide a secure-by-default image decoding solution. The combination of compile-time hardening, runtime limits, and continuous fuzzing provides a robust defense against a wide range of vulnerabilities.
+
+### Sandboxing
+
+The `image_harden_cli` demonstration binary uses a combination of kernel namespaces and `seccomp-bpf` to create a sandboxed environment for image decoding. This provides an additional layer of security by isolating the decoding process from the rest of the system.
+
+-   **Kernel Namespaces**: The decoding process is run in new PID, network, and mount namespaces. This means it has its own process tree, no network access, and a private filesystem view.
+-   **`seccomp-bpf`**: A strict `seccomp-bpf` filter is applied to the decoding process, limiting the available system calls to only those that are absolutely necessary for decoding an image.
+
+This sandboxing approach significantly reduces the attack surface and makes it much more difficult for a compromised decoder to have any impact on the host system.
