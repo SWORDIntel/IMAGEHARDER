@@ -1,6 +1,6 @@
 # ImageHarden
 
-ImageHarden is a system for hardening image decoding libraries on Debian-based systems. It provides a set of scripts and a Rust library to build and use hardened versions of `libpng` and `libjpeg-turbo`, reducing the risk of remote code execution vulnerabilities in image decoding.
+ImageHarden is a system for hardening image decoding libraries on Debian-based systems. It provides a set of scripts and a Rust library to build and use hardened versions of `libpng`, `libjpeg-turbo`, and `librsvg`, reducing the risk of remote code execution vulnerabilities in image decoding.
 
 ## Features
 
@@ -10,13 +10,14 @@ ImageHarden is a system for hardening image decoding libraries on Debian-based s
 -   **CI Fuzzing**: The project includes a continuous integration setup with `cargo-fuzz` to continuously test the hardened libraries and Rust wrappers for vulnerabilities.
 -   **Safe Rust Wrappers**: The Rust library provides a safe, idiomatic API for decoding images, abstracting away the complexities of the underlying C libraries and their FFI.
 -   **Kernel-Level Sandboxing**: The demonstration binary uses `seccomp-bpf` and kernel namespaces to create a secure, isolated environment for image decoding.
+-   **SVG Sanitization**: SVG files are sanitized with `ammonia` to remove potentially malicious content before being rendered.
 
 ## Getting Started
 
 ### Prerequisites
 
 -   A Debian-based system (e.g., Ubuntu)
--   `build-essential`, `clang`, `cmake`, `nasm`, `autoconf`, `automake`, `libtool`, `git`, `pkg-config`
+-   `build-essential`, `clang`, `cmake`, `nasm`, `autoconf`, `automake`, `libtool`, `git`, `pkg-config`, `librsvg2-dev`
 -   The Rust toolchain
 
 ### Building the Hardened Libraries
@@ -31,7 +32,7 @@ This script will install the necessary dependencies, clone the library source co
 
 ### Using the Rust Library
 
-The `image_harden` Rust library provides two main functions for decoding images: `decode_png` and `decode_jpeg`. These functions take a byte slice of the image data and return a `Result` containing either the decoded image data or an `ImageHardenError`.
+The `image_harden` Rust library provides three main functions for decoding images: `decode_png`, `decode_jpeg`, and `decode_svg`. These functions take a byte slice of the image data and return a `Result` containing either the decoded image data or an `ImageHardenError`.
 
 To use the library, add it as a dependency to your `Cargo.toml`:
 
@@ -43,16 +44,16 @@ image_harden = { path = "./image_harden" }
 Then, you can use the functions as follows:
 
 ```rust
-use image_harden::{decode_png, ImageHardenError};
+use image_harden::{decode_svg, ImageHardenError};
 use std::fs::File;
 use std::io::Read;
 
 fn main() -> Result<(), ImageHardenError> {
-    let mut file = File::open("my_image.png")?;
+    let mut file = File::open("my_image.svg")?;
     let mut buffer = Vec::new();
     file.read_to_end(&mut buffer)?;
 
-    let decoded_image = decode_png(&buffer)?;
+    let decoded_image = decode_svg(&buffer)?;
 
     println!("Successfully decoded image with size: {}", decoded_image.len());
 
@@ -67,7 +68,7 @@ The project includes a demonstration binary, `image_harden_cli`, which can be us
 ```bash
 cd image_harden
 cargo build
-./target/debug/image_harden_cli /path/to/your/image.png
+./target/debug/image_harden_cli /path/to/your/image.svg
 ```
 
 ### Fuzzing
@@ -91,6 +92,6 @@ ImageHarden is designed to provide a secure-by-default image decoding solution. 
 The `image_harden_cli` demonstration binary uses a combination of kernel namespaces and `seccomp-bpf` to create a sandboxed environment for image decoding. This provides an additional layer of security by isolating the decoding process from the rest of the system.
 
 -   **Kernel Namespaces**: The decoding process is run in new PID, network, and mount namespaces. This means it has its own process tree, no network access, and a private filesystem view.
--   **`seccomp-bpf`**: A strict `seccomp-bpf` filter is applied to the decoding process, limiting the available system calls to only those that are absolutely necessary for decoding an image.
+-   **`seccomp-bpf`**: A strict `seccomp-bpf` filter is applied to the decoding process, limiting the available system calls to only those that are absolutely necessary for decoding an image. Two different `seccomp` profiles are used: a general profile for PNG and JPEG decoding, and a more restrictive profile for SVG decoding.
 
 This sandboxing approach significantly reduces the attack surface and makes it much more difficult for a compromised decoder to have any impact on the host system.

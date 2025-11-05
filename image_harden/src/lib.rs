@@ -8,6 +8,9 @@ use std::ffi::CStr;
 use std::io::Read;
 use std::mem;
 use thiserror::Error;
+use librsvg::SvgHandle;
+use ammonia::clean;
+use cairo;
 
 #[derive(Debug, Error)]
 pub enum ImageHardenError {
@@ -15,6 +18,8 @@ pub enum ImageHardenError {
     PngError(String),
     #[error("JPEG decoding failed: {0}")]
     JpegError(String),
+    #[error("SVG decoding failed: {0}")]
+    SvgError(String),
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
     #[error("Null pointer encountered")]
@@ -148,6 +153,18 @@ pub fn decode_jpeg(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
 
         Ok(image_data)
     }
+}
+
+// SVG wrapper
+pub fn decode_svg(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
+    let sanitized_svg = clean(std::str::from_utf8(data).map_err(|e| ImageHardenError::SvgError(e.to_string()))?).to_string();
+    let handle = SvgHandle::from_str(&sanitized_svg).map_err(|e| ImageHardenError::SvgError(e.to_string()))?;
+    let mut surface = cairo::ImageSurface::create(cairo::Format::ARgb32, 256, 256).map_err(|e| ImageHardenError::SvgError(e.to_string()))?;
+    let cr = cairo::Context::new(&mut surface).map_err(|e| ImageHardenError::SvgError(e.to_string()))?;
+    handle.render_cairo(&cr).map_err(|e| ImageHardenError::SvgError(e.to_string()))?;
+    let mut png_data = Vec::new();
+    surface.write_to_png(&mut png_data).map_err(|e| ImageHardenError::SvgError(e.to_string()))?;
+    Ok(png_data)
 }
 
 extern "C" fn error_fn(png_ptr: png_structp, error_msg: png_const_charp) {
