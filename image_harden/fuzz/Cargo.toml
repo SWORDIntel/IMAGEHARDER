@@ -40,3 +40,31 @@ path = "fuzz_targets/fuzz_svg.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_mp3"
+path = "fuzz_targets/fuzz_mp3.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_vorbis"
+path = "fuzz_targets/fuzz_vorbis.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_flac"
+path = "fuzz_targets/fuzz_flac.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_audio"
+path = "fuzz_targets/fuzz_audio.rs"
+test = false
+doc = false
+bench = false
