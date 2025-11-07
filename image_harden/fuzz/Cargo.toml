@@ -68,3 +68,24 @@ path = "fuzz_targets/fuzz_audio.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_video_mp4"
+path = "fuzz_targets/fuzz_video_mp4.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_video_mkv"
+path = "fuzz_targets/fuzz_video_mkv.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_video_avi"
+path = "fuzz_targets/fuzz_video_avi.rs"
+test = false
+doc = false
+bench = false

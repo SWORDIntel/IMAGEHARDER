@@ -197,3 +197,54 @@ match decode_mp3(&audio_data) {
     }
 }
 ```
+
+## Video Format Hardening
+
+**CRITICAL**: Video files are the most dangerous attack vector, capable of VM escape and CPU desynchronization attacks.
+
+For comprehensive video hardening documentation, see the [Video Hardening Guide](VIDEO_HARDENING.md).
+
+### Video Security Features
+
+- **Pre-validation**: All video containers validated BEFORE codec processing
+- **Pure Rust parsers**: MP4 (Firefox's parser), MKV/WebM (matroska), AVI (custom)
+- **Format detection**: Automatic magic byte identification
+- **Strict limits**: 4K max resolution, 1 hour max duration, 500 MB max file size
+- **WebAssembly sandbox**: FFmpeg isolated in Wasm runtime
+- **Xen support**: Enhanced hardening for Xen PV/HVM guests with graceful fallback
+- **Hardened drivers**: Kernel 6.17+ driver configs for Debian (V4L2, DRM)
+
+### Supported Video Formats
+
+| Format | Security Level | Parser |
+|--------|---------------|---------|
+| MP4/MOV | HIGH | mp4parse (Rust, Firefox) |
+| MKV | HIGH | matroska (Rust) |
+| WebM | HIGH | matroska (Rust) |
+| AVI | MEDIUM | Custom Rust parser |
+
+### Hardened Kernel Drivers (NEW!)
+
+For Debian with kernel 6.17+:
+
+```bash
+# Build hardened V4L2 and DRM drivers
+./build_hardened_drivers.sh
+
+# Install configurations
+sudo /opt/hardened-drivers/install-hardened-drivers.sh
+
+# Reboot
+sudo reboot
+```
+
+**Driver Hardening Features:**
+- USB video drivers DISABLED by default (manual enable only)
+- Hardware acceleration DISABLED (prevents GPU exploits)
+- DMA buffers limited to 100 MB per allocation
+- Module signing REQUIRED
+- `/dev/mem` and `/dev/kmem` DISABLED
+- Xen grant table support for safer DMA
+- Stack protection, CFI, shadow call stack (ARM64)
+
+See `VIDEO_HARDENING.md` for complete driver documentation.
