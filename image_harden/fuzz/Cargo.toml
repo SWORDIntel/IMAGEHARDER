@@ -89,3 +89,10 @@ path = "fuzz_targets/fuzz_video_avi.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_opus"
+path = "fuzz_targets/fuzz_opus.rs"
+test = false
+doc = false
+bench = false
