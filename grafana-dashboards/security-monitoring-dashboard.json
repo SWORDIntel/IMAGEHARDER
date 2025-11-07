@@ -1,0 +1,240 @@
+{
+  "dashboard": {
+    "title": "Media Hardening - Security Monitoring",
+    "tags": ["security", "threats", "compliance"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Threat Level",
+        "type": "gauge",
+        "gridPos": {"x": 0, "y": 0, "w": 8, "h": 8},
+        "targets": [
+          {
+            "expr": "(sum(rate(media_processor_security_violations_total[5m])) * 100) / (sum(rate(media_processor_files_processed_total[5m])) + 0.001)",
+            "legendFormat": "Violation Rate %"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": true,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 1, "color": "yellow"},
+                {"value": 5, "color": "red"}
+              ]
+            },
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Malware Detection Events",
+        "type": "stat",
+        "gridPos": {"x": 8, "y": 0, "w": 8, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(media_processor_malware_detected_total)",
+            "legendFormat": "Total Detections"
+          }
+        ],
+        "options": {
+          "colorMode": "background"
+        },
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"value": 0, "color": "green"},
+            {"value": 1, "color": "red"}
+          ]
+        }
+      },
+      {
+        "id": 3,
+        "title": "Files Quarantined",
+        "type": "stat",
+        "gridPos": {"x": 16, "y": 0, "w": 8, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(media_processor_files_quarantined_total)",
+            "legendFormat": "Quarantined"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Buffer Overflow Attempts",
+        "type": "stat",
+        "gridPos": {"x": 8, "y": 4, "w": 8, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(media_processor_buffer_overflow_attempts_total)",
+            "legendFormat": "Attempts"
+          }
+        ],
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"value": 0, "color": "green"},
+            {"value": 1, "color": "red"}
+          ]
+        }
+      },
+      {
+        "id": 5,
+        "title": "Resource Limit Violations",
+        "type": "stat",
+        "gridPos": {"x": 16, "y": 4, "w": 8, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(media_processor_resource_limit_violations_total)",
+            "legendFormat": "Violations"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Security Events Timeline",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 8, "w": 24, "h": 8},
+        "targets": [
+          {
+            "expr": "sum by (violation_type) (rate(media_processor_security_violations_total[1m]))",
+            "legendFormat": "{{violation_type}}"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Events/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Malformed File Attempts by Format",
+        "type": "piechart",
+        "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum by (format) (media_processor_malformed_files_total)",
+            "legendFormat": "{{format}}"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Failed Validation Checks",
+        "type": "bargauge",
+        "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum by (check_type) (media_processor_validation_failures_total)",
+            "legendFormat": "{{check_type}}"
+          }
+        ],
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient"
+        }
+      },
+      {
+        "id": 9,
+        "title": "Suspicious Pattern Detections",
+        "type": "table",
+        "gridPos": {"x": 0, "y": 24, "w": 24, "h": 8},
+        "targets": [
+          {
+            "expr": "topk(10, sum by (pattern, format) (media_processor_suspicious_patterns_total))",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {},
+              "indexByName": {},
+              "renameByName": {
+                "pattern": "Pattern",
+                "format": "Format",
+                "Value": "Count"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Syscall Violations (seccomp)",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 32, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "rate(media_processor_seccomp_violations_total[1m])",
+            "legendFormat": "Blocked Syscalls"
+          }
+        ]
+      },
+      {
+        "id": 11,
+        "title": "Memory Safety Violations",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 32, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "sum by (type) (rate(media_processor_memory_violations_total[1m]))",
+            "legendFormat": "{{type}}"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "CVE Exposure Status",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 38, "w": 12, "h": 4},
+        "targets": [
+          {
+            "expr": "media_processor_known_cves",
+            "legendFormat": "Known CVEs"
+          }
+        ],
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"value": 0, "color": "green"},
+            {"value": 1, "color": "yellow"},
+            {"value": 5, "color": "red"}
+          ]
+        }
+      },
+      {
+        "id": 13,
+        "title": "Last Security Audit",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 38, "w": 12, "h": 4},
+        "targets": [
+          {
+            "expr": "time() - media_processor_last_security_audit_timestamp",
+            "legendFormat": "Time Since Last Audit"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        }
+      }
+    ]
+  }
+}

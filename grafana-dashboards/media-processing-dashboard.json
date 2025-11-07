@@ -1,0 +1,229 @@
+{
+  "dashboard": {
+    "title": "Media Hardening - Processing Metrics",
+    "tags": ["media", "security", "hardening"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Files Processed (Total)",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(media_processor_files_processed_total)",
+            "legendFormat": "Total Files"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Processing Rate (files/sec)",
+        "type": "stat",
+        "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "rate(media_processor_files_processed_total[1m])",
+            "legendFormat": "Rate"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        }
+      },
+      {
+        "id": 3,
+        "title": "Failed Files",
+        "type": "stat",
+        "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(media_processor_files_failed_total)",
+            "legendFormat": "Failed"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area"
+        },
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"value": 0, "color": "green"},
+            {"value": 10, "color": "yellow"},
+            {"value": 100, "color": "red"}
+          ]
+        }
+      },
+      {
+        "id": 4,
+        "title": "Security Violations Detected",
+        "type": "stat",
+        "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+        "targets": [
+          {
+            "expr": "sum(media_processor_security_violations_total)",
+            "legendFormat": "Violations"
+          }
+        ],
+        "options": {
+          "colorMode": "value"
+        },
+        "thresholds": {
+          "mode": "absolute",
+          "steps": [
+            {"value": 0, "color": "green"},
+            {"value": 1, "color": "red"}
+          ]
+        }
+      },
+      {
+        "id": 5,
+        "title": "Processing Time by Format",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(media_processor_processing_duration_seconds_bucket[5m])) by (le, format))",
+            "legendFormat": "{{format}} p95"
+          },
+          {
+            "expr": "histogram_quantile(0.50, sum(rate(media_processor_processing_duration_seconds_bucket[5m])) by (le, format))",
+            "legendFormat": "{{format}} p50"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Duration"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Files Processed by Format",
+        "type": "piechart",
+        "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum by (format) (media_processor_files_processed_total)",
+            "legendFormat": "{{format}}"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Memory Usage",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "media_processor_memory_bytes",
+            "legendFormat": "Memory Used"
+          },
+          {
+            "expr": "media_processor_memory_limit_bytes",
+            "legendFormat": "Memory Limit"
+          }
+        ],
+        "yaxes": [
+          {"format": "bytes"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 8,
+        "title": "CPU Usage",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(media_processor_cpu_seconds_total[1m])",
+            "legendFormat": "CPU Usage"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 9,
+        "title": "File Size Distribution",
+        "type": "heatmap",
+        "gridPos": {"x": 0, "y": 20, "w": 24, "h": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(media_processor_file_size_bytes_bucket[5m])) by (le)",
+            "format": "heatmap",
+            "legendFormat": "{{le}}"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Security Events Timeline",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 28, "w": 24, "h": 8},
+        "targets": [
+          {
+            "expr": "sum by (type) (rate(media_processor_security_violations_total[1m]))",
+            "legendFormat": "{{type}}"
+          }
+        ],
+        "alert": {
+          "name": "Security Violation Alert",
+          "conditions": [
+            {
+              "evaluator": {"type": "gt", "params": [0]},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "message": "Security violation detected in media processing",
+          "noDataState": "no_data"
+        }
+      },
+      {
+        "id": 11,
+        "title": "Container Restarts",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 36, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "rate(kube_pod_container_status_restarts_total{container=\"media-processor\"}[5m])",
+            "legendFormat": "{{pod}}"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Error Rate by Type",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 36, "w": 12, "h": 6},
+        "targets": [
+          {
+            "expr": "sum by (error_type) (rate(media_processor_errors_total[1m]))",
+            "legendFormat": "{{error_type}}"
+          }
+        ]
+      }
+    ]
+  }
+}

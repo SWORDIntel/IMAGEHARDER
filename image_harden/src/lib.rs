@@ -14,6 +14,10 @@ use cairo;
 use wasmtime::*;
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder};
 
+// Metrics and monitoring modules
+pub mod metrics;
+pub mod metrics_server;
+
 #[derive(Debug, Error)]
 pub enum ImageHardenError {
     #[error("PNG decoding failed: {0}")]
