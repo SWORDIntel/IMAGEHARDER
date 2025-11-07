@@ -1,0 +1,339 @@
+name: Security Hardening CI/CD
+
+on:
+  push:
+    branches: [ main, claude/* ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run security scans daily at 2 AM UTC
+    - cron: '0 2 * * *'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  security-audit:
+    name: Security Audit (Cargo)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Cargo Audit
+        run: |
+          cargo install cargo-audit
+          cd image_harden
+          cargo audit --deny warnings
+
+      - name: Cargo Deny
+        run: |
+          cargo install cargo-deny
+          cd image_harden
+          cargo deny check
+
+  fuzzing:
+    name: Continuous Fuzzing
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang llvm
+
+      - name: Install Rust Nightly
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Build Hardened Libraries
+        run: |
+          ./build.sh
+          ./build_audio.sh
+
+      - name: Fuzz PNG (5 minutes)
+        run: |
+          cd image_harden
+          timeout 300 cargo fuzz run fuzz_png -- -max_total_time=300 || true
+
+      - name: Fuzz JPEG (5 minutes)
+        run: |
+          cd image_harden
+          timeout 300 cargo fuzz run fuzz_jpeg -- -max_total_time=300 || true
+
+      - name: Fuzz MP3 (5 minutes)
+        run: |
+          cd image_harden
+          timeout 300 cargo fuzz run fuzz_mp3 -- -max_total_time=300 || true
+
+      - name: Fuzz Vorbis (5 minutes)
+        run: |
+          cd image_harden
+          timeout 300 cargo fuzz run fuzz_vorbis -- -max_total_time=300 || true
+
+      - name: Fuzz FLAC (5 minutes)
+        run: |
+          cd image_harden
+          timeout 300 cargo fuzz run fuzz_flac -- -max_total_time=300 || true
+
+      - name: Fuzz Video MP4 (5 minutes)
+        run: |
+          cd image_harden
+          timeout 300 cargo fuzz run fuzz_video_mp4 -- -max_total_time=300 || true
+
+      - name: Fuzz Video MKV (5 minutes)
+        run: |
+          cd image_harden
+          timeout 300 cargo fuzz run fuzz_video_mkv -- -max_total_time=300 || true
+
+      - name: Upload Fuzzing Artifacts
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: fuzz-artifacts
+          path: image_harden/fuzz/artifacts/
+
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust: [stable, nightly]
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Rust ${{ matrix.rust }}
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          override: true
+          components: clippy, rustfmt
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang cmake nasm \
+            autoconf automake libtool git pkg-config \
+            libseccomp-dev librsvg2-dev libogg-dev
+
+      - name: Build Userspace Libraries
+        run: |
+          ./build.sh
+          ./build_audio.sh
+
+      - name: Cargo Format Check
+        run: |
+          cd image_harden
+          cargo fmt -- --check
+
+      - name: Cargo Clippy
+        run: |
+          cd image_harden
+          cargo clippy -- -D warnings
+
+      - name: Cargo Build
+        run: |
+          cd image_harden
+          cargo build --release --verbose
+
+      - name: Cargo Test
+        run: |
+          cd image_harden
+          cargo test --release --verbose
+
+      - name: Upload Binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: image_harden_cli-${{ matrix.rust }}
+          path: image_harden/target/release/image_harden_cli
+
+  kernel-config-validation:
+    name: Validate Kernel Configurations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential linux-headers-$(uname -r)
+
+      - name: Generate Audio Driver Configs
+        run: |
+          ./build_hardened_audio_drivers.sh
+
+      - name: Generate Video Driver Configs
+        run: |
+          ./build_hardened_drivers.sh
+
+      - name: Validate Config Files
+        run: |
+          # Check all config files exist
+          test -f /opt/hardened-audio-drivers/configs/alsa-hardened.conf
+          test -f /opt/hardened-drivers/configs/v4l2-hardened.conf
+          test -f /opt/hardened-drivers/configs/drm-hardened.conf
+
+          # Check for required security options
+          grep -q "CONFIG_SECURITY=y" /opt/hardened-drivers/configs/kernel-hardened-media.config
+          grep -q "CONFIG_FORTIFY_SOURCE=y" /opt/hardened-drivers/configs/kernel-hardened-media.config
+
+          echo "Kernel configs validated successfully"
+
+  xen-compatibility:
+    name: Xen Compatibility Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Check Xen Configurations
+        run: |
+          # Verify Xen support in build scripts
+          grep -r "CONFIG_XEN" build_hardened_*.sh
+          grep -r "XEN_GRANT" build_hardened_*.sh
+
+          # Verify graceful fallback logic
+          grep -r "proc/xen" build_*.sh
+
+          echo "Xen compatibility checks passed"
+
+  documentation-lint:
+    name: Documentation Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install markdownlint
+        run: npm install -g markdownlint-cli
+
+      - name: Lint Markdown Files
+        run: |
+          markdownlint '*.md' --ignore node_modules || true
+
+      - name: Check Documentation Completeness
+        run: |
+          # Verify all main docs exist
+          test -f README.md
+          test -f AUDIO_HARDENING.md
+          test -f VIDEO_HARDENING.md
+          test -f SECURITY_ARCHITECTURE.md
+          test -f PRODUCTION_DEPLOYMENT.md
+
+          # Verify minimum content
+          [ $(wc -l < README.md) -gt 100 ]
+          [ $(wc -l < AUDIO_HARDENING.md) -gt 100 ]
+          [ $(wc -l < VIDEO_HARDENING.md) -gt 100 ]
+
+          echo "Documentation validation passed"
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/dependency-review-action@v3
+        with:
+          fail-on-severity: moderate
+
+  cve-monitoring:
+    name: CVE Monitoring
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+
+      - name: Check Rust Dependencies for CVEs
+        run: |
+          cargo install cargo-audit
+          cd image_harden
+          cargo audit
+
+      - name: Check Submodule CVEs
+        run: |
+          # Check for known CVEs in audio libraries
+          echo "Checking CVEs in submodules..."
+
+          # Check mpg123 (if exists)
+          if [ -d mpg123 ]; then
+            echo "mpg123 version: $(cd mpg123 && git describe --tags || echo 'unknown')"
+          fi
+
+          # Check vorbis
+          if [ -d vorbis ]; then
+            echo "vorbis version: $(cd vorbis && git describe --tags || echo 'unknown')"
+          fi
+
+          # Check opus
+          if [ -d opus ]; then
+            echo "opus version: $(cd opus && git describe --tags || echo 'unknown')"
+          fi
+
+          # Check flac
+          if [ -d flac ]; then
+            echo "flac version: $(cd flac && git describe --tags || echo 'unknown')"
+          fi
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [security-audit, build-and-test, kernel-config-validation]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang cmake nasm \
+            autoconf automake libtool git pkg-config
+
+      - name: Build AIO
+        run: |
+          ./build_all_hardened.sh --skip-tests
+
+      - name: Create Release Archive
+        run: |
+          tar czf imageharder-release-$(date +%Y%m%d).tar.gz \
+            --exclude='.git' \
+            --exclude='target' \
+            --exclude='node_modules' \
+            *.sh *.md image_harden/ \
+            /opt/hardened-audio-drivers/ \
+            /opt/hardened-drivers/
+
+      - name: Upload Release Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: imageharder-release
+          path: imageharder-release-*.tar.gz

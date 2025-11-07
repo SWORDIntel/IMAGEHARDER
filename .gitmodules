@@ -1,3 +1,15 @@
 [submodule "ffmpeg"]
 	path = ffmpeg
 	url = https://github.com/FFmpeg/FFmpeg
+[submodule "ogg"]
+	path = ogg
+	url = https://github.com/xiph/ogg.git
+[submodule "vorbis"]
+	path = vorbis
+	url = https://github.com/xiph/vorbis.git
+[submodule "opus"]
+	path = opus
+	url = https://github.com/xiph/opus.git
+[submodule "flac"]
+	path = flac
+	url = https://github.com/xiph/flac.git

@@ -40,3 +40,59 @@ path = "fuzz_targets/fuzz_svg.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_mp3"
+path = "fuzz_targets/fuzz_mp3.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_vorbis"
+path = "fuzz_targets/fuzz_vorbis.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_flac"
+path = "fuzz_targets/fuzz_flac.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_audio"
+path = "fuzz_targets/fuzz_audio.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_video_mp4"
+path = "fuzz_targets/fuzz_video_mp4.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_video_mkv"
+path = "fuzz_targets/fuzz_video_mkv.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_video_avi"
+path = "fuzz_targets/fuzz_video_avi.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_opus"
+path = "fuzz_targets/fuzz_opus.rs"
+test = false
+doc = false
+bench = false

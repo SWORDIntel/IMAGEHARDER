@@ -13,6 +13,18 @@ wasmtime = "0.39"
 wasmtime-wasi = "0.39"
 landlock = "0.1"
 
+# Pure Rust audio decoders (safer than C bindings)
+lewton = "0.10"        # Vorbis decoder (pure Rust)
+claxon = "0.4"         # FLAC decoder (pure Rust)
+minimp3 = "0.5"        # MP3 decoder (Rust wrapper around minimp3)
+opus = "0.3"           # Opus decoder
+ogg = "0.9"            # Ogg container parser (pure Rust)
+
+# Prometheus metrics
+prometheus = { version = "0.13", features = ["process"] }
+lazy_static = "1.4"
+tiny_http = "0.12"
+
 [build-dependencies]
 bindgen = "0.69"
 cc = "1.0"

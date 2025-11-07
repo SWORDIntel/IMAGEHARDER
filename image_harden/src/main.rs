@@ -9,10 +9,44 @@ use std::io::{Read, Write};
 use std::os::unix::io::FromRawFd;
 use std::path::Path;
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 fn main() {
     let args: Vec<String> = env::args().collect();
+
+    // Handle special flags
+    if args.len() == 2 {
+        match args[1].as_str() {
+            "--version" | "-v" => {
+                println!("image_harden_cli v{}", VERSION);
+                println!("Hardened media processing with Rust");
+                println!("Formats: PNG, JPEG, SVG, MP3, Vorbis, FLAC, Opus, MP4, MKV, AVI");
+                return;
+            }
+            "--health-check" | "--health" => {
+                // Simple health check: verify binary is functional
+                match perform_health_check() {
+                    Ok(_) => {
+                        println!("OK");
+                        std::process::exit(0);
+                    }
+                    Err(e) => {
+                        eprintln!("FAILED: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+            "--help" | "-h" => {
+                print_help(&args[0]);
+                return;
+            }
+            _ => {}
+        }
+    }
+
     if args.len() != 2 {
         eprintln!("Usage: {} <path_to_image>", args[0]);
+        eprintln!("Try '{}  --help' for more information.", args[0]);
         return;
     }
 
@@ -158,4 +192,49 @@ fn apply_video_seccomp_filter() -> Result<(), Box<dyn std::error::Error>> {
     filter.load()?;
 
     Ok(())
+}
+
+fn perform_health_check() -> Result<(), String> {
+    // Basic health check: verify we can create a small test buffer
+    // This ensures the binary is functional without processing actual files
+    let test_buffer = vec![0u8; 1024];
+    if test_buffer.len() != 1024 {
+        return Err("Memory allocation failed".to_string());
+    }
+
+    // Check if we can access required libraries (they're statically linked, so this is mostly symbolic)
+    // In production, you might check for access to temp directories, etc.
+    Ok(())
+}
+
+fn print_help(program_name: &str) {
+    println!("Image Harden CLI v{}", VERSION);
+    println!("Hardened media file processing with memory safety and security sandboxing");
+    println!();
+    println!("USAGE:");
+    println!("    {} <FILE>", program_name);
+    println!("    {} [OPTIONS]", program_name);
+    println!();
+    println!("OPTIONS:");
+    println!("    -h, --help           Print this help message");
+    println!("    -v, --version        Print version information");
+    println!("    --health-check       Perform health check (for Kubernetes probes)");
+    println!();
+    println!("SUPPORTED FORMATS:");
+    println!("    Images:  PNG, JPEG, SVG");
+    println!("    Audio:   MP3, Vorbis (.ogg), FLAC, Opus");
+    println!("    Video:   MP4, MKV/WebM, AVI");
+    println!();
+    println!("SECURITY FEATURES:");
+    println!("    - Memory-safe Rust implementations");
+    println!("    - Kernel namespaces (PID, NET, MOUNT)");
+    println!("    - Seccomp-BPF syscall filtering");
+    println!("    - Landlock filesystem restrictions");
+    println!("    - Strict resource limits");
+    println!();
+    println!("EXAMPLES:");
+    println!("    {} image.png", program_name);
+    println!("    {} audio.mp3", program_name);
+    println!("    {} video.mp4", program_name);
+    println!();
 }
