@@ -1,4 +1,4 @@
-# Polyglot File Generator - VX Underground Publication
+# TeamTNT Polyglot Research Package
 
 **Author:** IMAGEHARDER Security Research Team
 **Publication Date:** 2025-01-08
@@ -9,68 +9,81 @@
 
 ## Overview
 
-This package contains a complete analysis and reconstruction of APT TeamTNT's polyglot file technique, which allows files to be simultaneously valid images (GIF/PNG/JPEG) and executable shell scripts.
+Complete analysis and reconstruction of APT TeamTNT's polyglot file technique, which creates files that are simultaneously valid images (GIF/PNG/JPEG) and executable shell scripts.
 
-## Contents
+## Directory Structure
 
 ```
-IMAGEHARDER/
-├── polyglot_generator.c        # C implementation of polyglot generator
-├── POLYGLOT_ANALYSIS.md        # Comprehensive threat intelligence report
-├── example_payload.sh          # Benign test payload
-├── Makefile.polyglot           # Build automation
-├── CVE_COVERAGE.md             # CVE mitigations in IMAGEHARDER
-└── image_harden/               # Hardened image library (defense)
-    ├── wrapper.c               # CVE mitigations for libpng/libjpeg/giflib
-    ├── src/lib.rs              # Rust safe wrappers
-    └── fuzz/                   # Fuzzing targets
+polyglot_research/
+├── README.md                    # This file
+├── Makefile                     # Master build system
+│
+├── c_implementation/            # Portable C version
+│   ├── polyglot_generator.c    # Full C implementation
+│   └── Makefile                # C build system
+│
+├── asm_implementation/          # Minimal x86-64 version
+│   ├── polyglot_generator.asm  # Pure assembly (1000+ lines)
+│   └── build_asm.sh            # Assembly build script
+│
+├── documentation/               # Complete technical docs
+│   ├── POLYGLOT_ANALYSIS.md    # Threat intelligence (18KB)
+│   └── ASM_IMPLEMENTATION.md   # Assembly deep dive (15KB)
+│
+├── examples/                    # Test payloads
+│   └── example_payload.sh      # Benign demo script
+│
+└── defense/                     # Mitigation strategies
+    └── CVE_COVERAGE.md         # All CVE mitigations (7KB)
 ```
 
 ## Quick Start
 
-### 1. Build the Generator
+### Build All Implementations
 
 ```bash
-make -f Makefile.polyglot all
+# Build both C and Assembly versions
+make all
+
+# Or build individually
+make c      # C implementation only
+make asm    # Assembly implementation only
 ```
 
-### 2. Create Polyglot Files
+### Generate Polyglot Files
 
+**C Implementation:**
 ```bash
-# GIF polyglot
-./polyglot_gen -t gif -s example_payload.sh -o test.gif
-
-# PNG polyglot
-./polyglot_gen -t png -s example_payload.sh -o test.png
-
-# JPEG polyglot
-./polyglot_gen -t jpeg -s example_payload.sh -o test.jpg
+cd c_implementation
+./polyglot_gen -t gif -s ../examples/example_payload.sh -o test.gif
+./polyglot_gen -t png -s ../examples/example_payload.sh -o test.png
+./polyglot_gen -t jpeg -s ../examples/example_payload.sh -o test.jpg
 ```
 
-### 3. Verify Files
+**Assembly Implementation:**
+```bash
+cd asm_implementation
+./polyglot_gen_asm gif ../examples/example_payload.sh test.gif
+./polyglot_gen_asm png ../examples/example_payload.sh test.png
+./polyglot_gen_asm jpeg ../examples/example_payload.sh test.jpg
+```
+
+### Verify Generated Files
 
 ```bash
 # Check that files are valid images
-file test.gif test.png test.jpg
+file test.*
 
-# Open in image viewer (should display 1x1 pixel image)
+# Expected output:
+# test.gif:  GIF image data, version 87a, 1 x 1
+# test.png:  PNG image data, 1 x 1, 8-bit/color RGB
+# test.jpg:  JPEG image data, JFIF standard 1.01
+
+# Open in image viewer
 display test.gif
 
 # Execute as script
-chmod +x test.gif
-./test.gif
-```
-
-### 4. Test Detection (Defense)
-
-```bash
-# Build IMAGEHARDER first
-cd image_harden
-cargo build --release
-cd ..
-
-# Test detection
-make -f Makefile.polyglot validate
+chmod +x test.gif && ./test.gif
 ```
 
 ## Technical Details
