@@ -24,6 +24,8 @@ pub enum ImageHardenError {
     PngError(String),
     #[error("JPEG decoding failed: {0}")]
     JpegError(String),
+    #[error("GIF decoding failed: {0}")]
+    GifError(String),
     #[error("SVG decoding failed: {0}")]
     SvgError(String),
     #[error("Video decoding failed: {0}")]
@@ -174,6 +176,192 @@ pub fn decode_jpeg(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
         jpeg_destroy_decompress(&mut cinfo);
 
         Ok(image_data)
+    }
+}
+
+// GIF wrapper with CVE-2019-15133, CVE-2016-3977 mitigations
+pub fn decode_gif(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    // Custom reader state for memory-based GIF reading
+    struct GifMemoryReader {
+        data: *const u8,
+        len: usize,
+        pos: AtomicUsize,
+    }
+
+    unsafe impl Send for GifMemoryReader {}
+    unsafe impl Sync for GifMemoryReader {}
+
+    // GIF read function for memory buffer
+    unsafe extern "C" fn gif_read_fn(gif_file: *mut GifFileType, buf: *mut GifByteType, size: i32) -> i32 {
+        let reader = (*gif_file).UserData as *mut GifMemoryReader;
+        if reader.is_null() {
+            return 0;
+        }
+
+        let reader_ref = &*reader;
+        let pos = reader_ref.pos.load(Ordering::Relaxed);
+        let available = reader_ref.len.saturating_sub(pos);
+        let to_read = (size as usize).min(available);
+
+        if to_read == 0 {
+            return 0;
+        }
+
+        std::ptr::copy_nonoverlapping(
+            reader_ref.data.add(pos),
+            buf,
+            to_read,
+        );
+
+        reader_ref.pos.store(pos + to_read, Ordering::Relaxed);
+        to_read as i32
+    }
+
+    // Validate GIF signature (GIF87a or GIF89a)
+    if data.len() < 6 {
+        return Err(ImageHardenError::GifError("File too small".to_string()));
+    }
+    if &data[0..3] != b"GIF" {
+        return Err(ImageHardenError::GifError("Invalid GIF signature".to_string()));
+    }
+    if &data[3..6] != b"87a" && &data[3..6] != b"89a" {
+        return Err(ImageHardenError::GifError("Unknown GIF version".to_string()));
+    }
+
+    unsafe {
+        // Create reader state
+        let mut reader = GifMemoryReader {
+            data: data.as_ptr(),
+            len: data.len(),
+            pos: AtomicUsize::new(0),
+        };
+
+        // Create error info structure
+        let mut error_info = GifErrorInfo {
+            error_msg: [0i8; 256],
+            error_code: 0,
+        };
+
+        // Open GIF with safe wrapper (CVE-2019-15133, CVE-2016-3977 mitigations)
+        let gif_file = safe_DGifOpen(
+            &mut reader as *mut _ as *mut std::ffi::c_void,
+            Some(gif_read_fn),
+            &mut error_info,
+        );
+
+        if gif_file.is_null() {
+            let msg = std::ffi::CStr::from_ptr(error_info.error_msg.as_ptr())
+                .to_string_lossy()
+                .into_owned();
+            return Err(ImageHardenError::GifError(format!("Failed to open GIF: {}", msg)));
+        }
+
+        // Slurp GIF with comprehensive validation
+        if safe_DGifSlurp(gif_file, &mut error_info) == GIF_ERROR {
+            let msg = std::ffi::CStr::from_ptr(error_info.error_msg.as_ptr())
+                .to_string_lossy()
+                .into_owned();
+            safe_DGifClose(gif_file);
+            return Err(ImageHardenError::GifError(format!("Failed to decode GIF: {}", msg)));
+        }
+
+        let gif = &*gif_file;
+
+        // Get canvas dimensions
+        let width = gif.SWidth as usize;
+        let height = gif.SHeight as usize;
+
+        // Allocate output buffer (RGBA format)
+        let mut output = vec![0u8; width * height * 4];
+
+        // Get global color map
+        let global_cmap = if !gif.SColorMap.is_null() {
+            Some(&*gif.SColorMap)
+        } else {
+            None
+        };
+
+        // Decode first frame (for simplicity; full implementation would handle animation)
+        if gif.ImageCount > 0 {
+            let image = &gif.SavedImages.offset(0).read();
+            let img_desc = &image.ImageDesc;
+
+            // Get color map (local or global)
+            let cmap = if !img_desc.ColorMap.is_null() {
+                &*img_desc.ColorMap
+            } else if let Some(gcmap) = global_cmap {
+                gcmap
+            } else {
+                safe_DGifClose(gif_file);
+                return Err(ImageHardenError::GifError("No color map found".to_string()));
+            };
+
+            // Validate color map
+            if cmap.ColorCount <= 0 || cmap.ColorCount > 256 {
+                safe_DGifClose(gif_file);
+                return Err(ImageHardenError::GifError(
+                    format!("Invalid color count: {}", cmap.ColorCount)
+                ));
+            }
+
+            if cmap.Colors.is_null() {
+                safe_DGifClose(gif_file);
+                return Err(ImageHardenError::GifError("Color map is NULL".to_string()));
+            }
+
+            // Decode image with bounds checking (CVE-2016-3977 mitigation)
+            let img_width = img_desc.Width as usize;
+            let img_height = img_desc.Height as usize;
+            let img_left = img_desc.Left as usize;
+            let img_top = img_desc.Top as usize;
+
+            // Validate bounds
+            if img_left + img_width > width || img_top + img_height > height {
+                safe_DGifClose(gif_file);
+                return Err(ImageHardenError::GifError("Image out of bounds".to_string()));
+            }
+
+            // Copy pixels with bounds checking
+            for y in 0..img_height {
+                for x in 0..img_width {
+                    let src_idx = y * img_width + x;
+                    let dst_x = img_left + x;
+                    let dst_y = img_top + y;
+                    let dst_idx = (dst_y * width + dst_x) * 4;
+
+                    // Bounds check
+                    if dst_idx + 3 >= output.len() {
+                        continue;
+                    }
+
+                    // Get color index from raster
+                    let color_idx = *image.RasterBits.offset(src_idx as isize) as usize;
+
+                    // Validate color index (CVE-2019-15133 mitigation)
+                    if color_idx >= cmap.ColorCount as usize {
+                        safe_DGifClose(gif_file);
+                        return Err(ImageHardenError::GifError(
+                            format!("Color index {} out of range (max: {})",
+                                color_idx, cmap.ColorCount - 1)
+                        ));
+                    }
+
+                    // Get color from color map
+                    let color = cmap.Colors.offset(color_idx as isize).read();
+
+                    // Write RGBA
+                    output[dst_idx] = color.Red;
+                    output[dst_idx + 1] = color.Green;
+                    output[dst_idx + 2] = color.Blue;
+                    output[dst_idx + 3] = 255; // Opaque
+                }
+            }
+        }
+
+        safe_DGifClose(gif_file);
+        Ok(output)
     }
 }
 
