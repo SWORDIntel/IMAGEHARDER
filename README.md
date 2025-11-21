@@ -10,7 +10,7 @@ ImageHarden is a comprehensive system for hardening image and audio decoding lib
 - `GIF` - GIF image decoding with CVE-2019-15133 and CVE-2016-3977 mitigations
 - `WebP` - Modern web format with CVE-2023-4863 mitigation (HIGH PRIORITY)
 - `HEIF/HEIC` - Apple iOS/macOS format (HEIC, HEIF, MIF1, MSF1, HEVC, HEVX)
-- `librsvg` - SVG rendering with sanitization
+- `resvg` - Pure Rust SVG rendering with sanitization (memory-safe)
 - `ffmpeg` - Video decoding (WebAssembly sandboxed)
 
 ### Audio Libraries
@@ -38,7 +38,8 @@ ImageHarden is a comprehensive system for hardening image and audio decoding lib
 ### Prerequisites
 
 -   A Debian-based system (e.g., Ubuntu) with a modern kernel (5.13+ for Landlock). For instructions on how to configure your kernel, see the [Kernel Configuration Guide](KERNEL_BUILD.md).
--   `build-essential`, `clang`, `cmake`, `nasm`, `autoconf`, `automake`, `libtool`, `git`, `pkg-config`, `librsvg2-dev`
+-   `build-essential`, `clang`, `cmake`, `nasm`, `autoconf`, `automake`, `libtool`, `git`, `pkg-config`
+-   System libraries: `libpango1.0-dev`, `libheif-dev`, `libxml2-dev`, `libgif-dev`, `libjpeg-dev`
 -   The Rust toolchain
 
 ### Building the Hardened Libraries
@@ -271,7 +272,7 @@ See `VIDEO_HARDENING.md` for complete driver documentation.
 3. **GIF** - giflib with CVE-2019-15133 & CVE-2016-3977 mitigations
 4. **WebP** - webp crate with CVE-2023-4863 mitigation (50MB max, 16K dimensions)
 5. **HEIF/HEIC** - libheif-rs supporting Apple formats (heic, heix, mif1, msf1, hevc, hevx)
-6. **SVG** - librsvg + ammonia sanitization (XSS/script removal)
+6. **SVG** - resvg (pure Rust) + usvg + ammonia sanitization (100% memory-safe, XSS removal)
 7. **Video frames** - FFmpeg in WebAssembly sandbox
 
 **Audio Formats (5 formats hardened):**
