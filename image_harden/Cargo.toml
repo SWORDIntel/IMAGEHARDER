@@ -9,9 +9,9 @@ libseccomp-rs = "0.1"
 nix = { version = "0.27", features = ["sched", "process"] }
 librsvg = "2.54.5"
 ammonia = "3.3.0"
-wasmtime = "0.39"
-wasmtime-wasi = "0.39"
-landlock = "0.1"
+wasmtime = "25"
+wasmtime-wasi = "25"
+landlock = "0.4"
 
 # Pure Rust audio decoders (safer than C bindings)
 lewton = "0.10"        # Vorbis decoder (pure Rust)
@@ -19,6 +19,14 @@ claxon = "0.4"         # FLAC decoder (pure Rust)
 minimp3 = "0.5"        # MP3 decoder (Rust wrapper around minimp3)
 opus = "0.3"           # Opus decoder
 ogg = "0.9"            # Ogg container parser (pure Rust)
+
+# Additional image formats (high priority CVE mitigation)
+webp = "0.2"           # WebP decoder (CVE-2023-4863 mitigation)
+libheif-rs = "0.18"    # HEIF/HEIC decoder (iOS/macOS format)
+
+# Video container parsers (pure Rust, memory-safe)
+mp4parse = "0.12"      # MP4/MOV parser (Firefox's Rust implementation)
+matroska = "0.14"      # MKV/WebM parser (pure Rust EBML)
 
 # Prometheus metrics
 prometheus = { version = "0.13", features = ["process"] }
