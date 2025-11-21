@@ -11,7 +11,7 @@ use tiny_http::{Response, Server};
 /// This runs in a separate thread to avoid blocking the main processing
 pub fn start_metrics_server(port: u16) -> Result<(), Box<dyn std::error::Error>> {
     let addr = format!("0.0.0.0:{}", port);
-    let server = Server::http(&addr)?;
+    let server = Server::http(&addr).map_err(|e| -> Box<dyn std::error::Error> { e })?;
 
     println!("Metrics server listening on http://{}/metrics", addr);
 
