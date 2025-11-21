@@ -96,3 +96,24 @@ path = "fuzz_targets/fuzz_opus.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_webp"
+path = "fuzz_targets/fuzz_webp.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_heif"
+path = "fuzz_targets/fuzz_heif.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_gif"
+path = "fuzz_targets/fuzz_gif.rs"
+test = false
+doc = false
+bench = false

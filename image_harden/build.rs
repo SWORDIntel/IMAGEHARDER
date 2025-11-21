@@ -24,10 +24,11 @@ fn main() {
     println!("cargo:rerun-if-changed=wrapper.c");
 
     // Generate bindings for libpng, libjpeg, and giflib
+    // Try both /usr/include and /usr/local/include for flexibility
     let bindings = bindgen::Builder::default()
         .header("/usr/include/png.h")
-        .header("/usr/local/include/jpeglib.h")
-        .header("/usr/local/include/gif_lib.h")
+        .header("/usr/include/jpeglib.h")
+        .header("/usr/include/gif_lib.h")
         .header("wrapper.c")
         .clang_arg("-I/usr/include")
         .clang_arg("-I/usr/local/include")
