@@ -117,3 +117,53 @@ path = "fuzz_targets/fuzz_gif.rs"
 test = false
 doc = false
 bench = false
+
+# =============================================================================
+# Extended format fuzz targets
+# =============================================================================
+
+[[bin]]
+name = "fuzz_avif"
+path = "fuzz_targets/fuzz_avif.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_jxl"
+path = "fuzz_targets/fuzz_jxl.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_tiff"
+path = "fuzz_targets/fuzz_tiff.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_exr"
+path = "fuzz_targets/fuzz_exr.rs"
+test = false
+doc = false
+bench = false
+
+# =============================================================================
+# Hidden-path component fuzz targets
+# =============================================================================
+
+[[bin]]
+name = "fuzz_icc"
+path = "fuzz_targets/fuzz_icc.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_exif"
+path = "fuzz_targets/fuzz_exif.rs"
+test = false
+doc = false
+bench = false

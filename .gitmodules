@@ -13,3 +13,24 @@
 [submodule "flac"]
 	path = flac
 	url = https://github.com/xiph/flac.git
+[submodule "dav1d"]
+	path = dav1d
+	url = https://code.videolan.org/videolan/dav1d.git
+[submodule "libavif"]
+	path = libavif
+	url = https://github.com/AOMediaCodec/libavif.git
+[submodule "libjxl"]
+	path = libjxl
+	url = https://github.com/libjxl/libjxl.git
+[submodule "libtiff"]
+	path = libtiff
+	url = https://gitlab.com/libtiff/libtiff.git
+[submodule "openexr"]
+	path = openexr
+	url = https://github.com/AcademySoftwareFoundation/openexr.git
+[submodule "lcms2"]
+	path = lcms2
+	url = https://github.com/mm2/Little-CMS.git
+[submodule "libexif"]
+	path = libexif
+	url = https://github.com/libexif/libexif.git
