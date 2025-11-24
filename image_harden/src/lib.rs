@@ -14,8 +14,14 @@ use ammonia::clean;
 pub mod metrics;
 pub mod metrics_server;
 
+// Extended format support
+pub mod formats;
+
 #[derive(Debug, Error)]
 pub enum ImageHardenError {
+    // =============================================================================
+    // Core image formats
+    // =============================================================================
     #[error("PNG decoding failed: {0}")]
     PngError(String),
     #[error("JPEG decoding failed: {0}")]
@@ -24,8 +30,34 @@ pub enum ImageHardenError {
     GifError(String),
     #[error("SVG decoding failed: {0}")]
     SvgError(String),
-    #[error("Video decoding failed: {0}")]
-    VideoError(String),
+    #[error("WebP decoding failed: {0}")]
+    WebPError(String),
+    #[error("HEIF/HEIC decoding failed: {0}")]
+    HeifError(String),
+
+    // =============================================================================
+    // Extended image formats
+    // =============================================================================
+    #[error("AVIF decoding failed: {0}")]
+    AvifError(String),
+    #[error("JPEG XL decoding failed: {0}")]
+    JxlError(String),
+    #[error("TIFF decoding failed: {0}")]
+    TiffError(String),
+    #[error("OpenEXR decoding failed: {0}")]
+    ExrError(String),
+
+    // =============================================================================
+    // Hidden-path components
+    // =============================================================================
+    #[error("ICC profile error: {0}")]
+    IccError(String),
+    #[error("EXIF metadata error: {0}")]
+    ExifError(String),
+
+    // =============================================================================
+    // Audio formats
+    // =============================================================================
     #[error("Audio decoding failed: {0}")]
     AudioError(String),
     #[error("MP3 decoding failed: {0}")]
@@ -36,14 +68,20 @@ pub enum ImageHardenError {
     FlacError(String),
     #[error("Opus decoding failed: {0}")]
     OpusError(String),
+
+    // =============================================================================
+    // Video formats
+    // =============================================================================
+    #[error("Video decoding failed: {0}")]
+    VideoError(String),
     #[error("Video container parsing failed: {0}")]
     VideoContainerError(String),
     #[error("Video validation failed: {0}")]
     VideoValidationError(String),
-    #[error("WebP decoding failed: {0}")]
-    WebPError(String),
-    #[error("HEIF/HEIC decoding failed: {0}")]
-    HeifError(String),
+
+    // =============================================================================
+    // System errors
+    // =============================================================================
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
     #[error("Null pointer encountered")]

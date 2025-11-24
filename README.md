@@ -1,328 +1,448 @@
-# ImageHarden
+# IMAGEHARDER
 
-ImageHarden is a comprehensive system for hardening image and audio decoding libraries on Debian-based systems. It provides scripts and a Rust library to build and use hardened versions of media processing libraries, significantly reducing the risk of remote code execution vulnerabilities.
+**Comprehensive Hardened Media Decoder with Extended Format Support**
 
-## Supported Libraries
+IMAGEHARDER is a production-grade system for hardening image, audio, and video decoding libraries. It provides comprehensive security measures including CPU-optimized hardening flags, sandboxing, fuzzing infrastructure, and support for extended modern formats.
 
-### Image Libraries
-- `libpng` - PNG image decoding
-- `libjpeg-turbo` - JPEG image decoding
-- `GIF` - GIF image decoding with CVE-2019-15133 and CVE-2016-3977 mitigations
-- `WebP` - Modern web format with CVE-2023-4863 mitigation (HIGH PRIORITY)
-- `HEIF/HEIC` - Apple iOS/macOS format (HEIC, HEIF, MIF1, MSF1, HEVC, HEVX)
-- `resvg` - Pure Rust SVG rendering with sanitization (memory-safe)
-- `ffmpeg` - Video decoding (WebAssembly sandboxed)
+---
 
-### Audio Libraries
-- `MP3` - via minimp3 (Rust wrapper)
-- `Vorbis` - via lewton (pure Rust)
-- `FLAC` - via claxon (pure Rust)
-- `Opus` - via opus crate
-- `Ogg` - via ogg crate (pure Rust)
+## 📋 Table of Contents
 
-## Features
+- [Supported Formats](#supported-formats)
+- [Security Features](#security-features)
+- [CPU Optimization](#cpu-optimization)
+- [Getting Started](#getting-started)
+- [Build Instructions](#build-instructions)
+- [Usage](#usage)
+- [Fuzzing](#fuzzing)
+- [Architecture](#architecture)
+- [Documentation](#documentation)
 
--   **Compile-Time Hardening**: Builds C libraries with comprehensive hardening flags, including stack protectors, FORTIFY_SOURCE=3, RELRO, PIE, and Control-Flow Enforcement Technology (CET).
--   **Pure Rust Audio Decoders**: Audio decoding uses memory-safe Rust implementations (lewton, claxon, minimp3) eliminating entire classes of vulnerabilities.
--   **Strict Runtime Limits**: Rust wrappers enforce strict limits on dimensions, memory usage, duration, sample rates, and channels to prevent DoS attacks.
--   **Fail-Closed Error Handling**: The library fails immediately on any error, never continuing with potentially corrupted data.
--   **CI Fuzzing**: Continuous fuzzing with `cargo-fuzz` for both image and audio decoders to catch vulnerabilities before production.
--   **Safe Rust Wrappers**: Idiomatic Rust API for decoding media, abstracting away unsafe FFI complexities.
--   **Kernel-Level Sandboxing**: Uses `seccomp-bpf`, kernel namespaces, and Landlock for isolated execution environments.
--   **SVG Sanitization**: SVG files sanitized with `ammonia` to remove malicious content before rendering.
--   **FFmpeg Wasm Sandboxing**: FFmpeg compiled to WebAssembly and executed in sandboxed `wasmtime` runtime.
--   **Malware Defense**: Specifically hardens against attacks like embedded PowerShell scripts in MP3 files sent via messaging apps.
+---
 
-## Getting Started
+## 🎨 Supported Formats
+
+### Core Image Formats
+- **PNG** - libpng with strict limits (CVE-2015-8540, CVE-2019-7317 mitigations)
+- **JPEG** - libjpeg-turbo (CVE-2018-14498 mitigation)
+- **GIF** - giflib (CVE-2019-15133, CVE-2016-3977 mitigations)
+- **WebP** - Pure Rust decoder (CVE-2023-4863 mitigation, HIGH PRIORITY)
+- **HEIF/HEIC** - Apple format (iOS/macOS image format)
+- **SVG** - resvg (Pure Rust, memory-safe with sanitization)
+
+### Extended Image Formats (NEW)
+- **AVIF** - AV1 Image File Format (libavif + dav1d)
+- **JPEG XL** - Next-gen lossy/lossless (libjxl)
+- **TIFF** - Tagged Image File Format (libtiff, CVE-hardened)
+- **OpenEXR** - High Dynamic Range images (VFX/HDR workflows)
+
+### Hidden-Path Components (NEW)
+- **ICC Profiles** - Color management (lcms2, with stripping option)
+- **EXIF Metadata** - Photo metadata (libexif, with privacy stripping)
+
+### Audio Formats (Pure Rust)
+- **MP3** - minimp3 (Rust wrapper)
+- **Vorbis** - lewton (pure Rust)
+- **FLAC** - claxon (pure Rust)
+- **Opus** - opus crate
+- **Ogg** - ogg container (pure Rust)
+
+### Video Formats
+- **MP4/MOV** - mp4parse (Firefox's Rust implementation)
+- **MKV/WebM** - matroska (pure Rust EBML)
+- **FFmpeg** - WebAssembly sandboxed (MPEG-TS and others)
+
+---
+
+## 🔒 Security Features
+
+### Compile-Time Hardening
+- **Stack Protection**: `-fstack-protector-strong`, `-fstack-clash-protection`
+- **Memory Safety**: `-D_FORTIFY_SOURCE=3`, `-fPIE`, `-pie`
+- **RELRO**: `-Wl,-z,relro,-z,now`
+- **No Executable Stack**: `-Wl,-z,noexecstack`
+- **Control Flow**: `-fcf-protection=full` (CET on x86_64)
+- **Hidden Symbols**: `-fvisibility=hidden`
+
+### Runtime Protection
+- **Strict Resource Limits**:
+  - Image dimensions (default: 8192x8192, configurable up to 16384x16384)
+  - File sizes (256-500 MB depending on format)
+  - IFD counts (TIFF: max 100 IFDs)
+  - Tag counts (ICC: max 256, EXIF: max 512)
+  - Memory quotas enforced before allocation
+
+- **Input Validation**:
+  - Magic byte verification
+  - Header sanity checks
+  - Dimension bounds checking
+  - Container structure validation
+
+- **Fail-Closed Error Handling**:
+  - No best-effort decoding
+  - Hard errors on warnings
+  - No partial data leakage
+
+### Sandboxing
+- **Kernel Namespaces** (PID, mount, user, network)
+- **seccomp-bpf** syscall filtering
+- **Landlock** filesystem access control
+- **WebAssembly** sandbox for FFmpeg
+
+### Privacy Protection
+- **Default ICC Profile Stripping**: Removes color profiles in hardened mode
+- **Default EXIF Stripping**: Removes all metadata including GPS
+- **Selective Retention**: Optional validated ICC/EXIF with strict limits
+
+---
+
+## ⚡ CPU Optimization
+
+IMAGEHARDER supports CPU-tuned builds for maximum performance:
+
+### CPU Profiles
+
+| Profile | Target | Use Case |
+|---------|--------|----------|
+| `generic` | x86-64 baseline | Maximum compatibility |
+| `v3` | x86-64-v3 (AVX2) | CI/production (Haswell+) |
+| `host` | Native CPU | Development (Intel Core Ultra 7 165H) |
+
+### Build Examples
+
+```bash
+# Generic (portable)
+IMAGEHARDEN_CPU=generic ./build.sh
+
+# AVX2 baseline (recommended for production)
+IMAGEHARDEN_CPU=v3 ./build_extended_formats.sh
+
+# Host-optimized (Meteor Lake: AVX2, AVX-VNNI, AES-NI, SHA)
+IMAGEHARDEN_CPU=host ./build_extended_formats.sh
+```
+
+### Optimizations Applied
+- **Meteor Lake** (`host`): `-march=native -mavx2 -mfma -mbmi -mbmi2 -maes -msha -mpclmul`
+- **AVX2** (`v3`): `-march=x86-64-v3 -mtune=core-avx2`
+- **Generic**: `-march=x86-64 -mtune=generic`
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
 
--   A Debian-based system (e.g., Ubuntu) with a modern kernel (5.13+ for Landlock). For instructions on how to configure your kernel, see the [Kernel Configuration Guide](KERNEL_BUILD.md).
--   `build-essential`, `clang`, `cmake`, `nasm`, `autoconf`, `automake`, `libtool`, `git`, `pkg-config`
--   System libraries: `libpango1.0-dev`, `libheif-dev`, `libxml2-dev`, `libgif-dev`, `libjpeg-dev`
--   The Rust toolchain
+#### System Requirements
+- Debian-based Linux (Ubuntu, Debian)
+- Kernel 5.13+ (for Landlock support)
+- 64-bit x86_64 architecture
 
-### Building the Hardened Libraries
-
-**Image Libraries:**
+#### Build Dependencies
 ```bash
+sudo apt-get update && sudo apt-get install -y \
+    build-essential clang cmake nasm meson ninja-build \
+    autoconf automake libtool git pkg-config \
+    libseccomp-dev yasm python3-pip \
+    rustc cargo
+```
+
+---
+
+## 🔨 Build Instructions
+
+### 1. Clone and Initialize
+
+```bash
+git clone https://github.com/SWORDIntel/IMAGEHARDER.git
+cd IMAGEHARDER
+git submodule update --init --recursive
+```
+
+### 2. Build Core Libraries
+
+```bash
+# Build core image libraries (GIF, etc.)
 ./build.sh
-```
 
-This script will install the necessary dependencies, clone the library source code, and build `libpng` and `libjpeg-turbo` with hardening flags.
+# Build extended formats (AVIF, JXL, TIFF, OpenEXR, ICC, EXIF)
+./build_extended_formats.sh
 
-**Audio Libraries:**
-```bash
+# Build audio codecs (optional, Rust uses pure implementations)
 ./build_audio.sh
-```
 
-This script builds hardened versions of `mpg123`, `libvorbis`, `libopus`, `libflac`, and `libogg` with the same security hardening. Note: The Rust library uses pure Rust implementations for most audio formats, so building C libraries is optional.
-
-### Building FFmpeg to Wasm
-
-The `setup_emsdk.sh` script automates the process of downloading and activating the Emscripten SDK.
-
-```bash
+# Build FFmpeg WebAssembly sandbox
 ./setup_emsdk.sh
-```
-
-The `build_ffmpeg_wasm.sh` script automates the process of compiling a minimal, static build of FFmpeg into a `ffmpeg.wasm` file.
-
-```bash
 ./build_ffmpeg_wasm.sh
 ```
 
-### Using the Rust Library
+### 3. Build Rust Components
 
-The `image_harden` Rust library provides functions for decoding both images and audio:
+```bash
+cd image_harden
+cargo build --release
+```
 
-**Image Decoding:** `decode_png`, `decode_jpeg`, `decode_gif`, `decode_webp`, `decode_heif`, `decode_svg`, `decode_video`
-**Audio Decoding:** `decode_mp3`, `decode_vorbis`, `decode_flac`, `decode_audio` (auto-detect)
+### 4. Run Tests
 
-All functions take a byte slice and return a `Result` containing either the decoded data or an `ImageHardenError`.
+```bash
+cargo test --release
+```
 
-To use the library, add it as a dependency to your `Cargo.toml`:
+---
+
+## 📖 Usage
+
+### Rust API
+
+Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-image_harden = { path = "./image_harden" }
+image_harden = { path = "../image_harden" }
 ```
 
-Then, you can use the functions as follows:
+### Example: Decoding Images
 
 ```rust
-use image_harden::{decode_video, decode_mp3, ImageHardenError};
-use std::fs::File;
-use std::io::Read;
+use image_harden::{decode_png, decode_jpeg, ImageHardenError};
 
 fn main() -> Result<(), ImageHardenError> {
-    // Decode video
-    let video_data = std::fs::read("my_video.mp4")?;
-    let decoded_video = decode_video(&video_data)?;
-    println!("Successfully decoded video: {} bytes", decoded_video.len());
+    // Decode PNG with hardening
+    let png_data = std::fs::read("image.png")?;
+    let decoded = decode_png(&png_data)?;
 
-    // Decode audio (safe against malware in MP3 files)
-    let audio_data = std::fs::read("suspicious_audio.mp3")?;
-    let decoded_audio = decode_mp3(&audio_data)?;
-    println!("Decoded {} samples at {} Hz",
-        decoded_audio.samples.len(),
-        decoded_audio.sample_rate);
+    // Decode JPEG
+    let jpeg_data = std::fs::read("photo.jpg")?;
+    let decoded = decode_jpeg(&jpeg_data)?;
 
     Ok(())
 }
 ```
 
-### Running the Demonstration Binary
+### Example: Extended Formats
 
-The project includes a demonstration binary, `image_harden_cli`, which can be used to test the library. To build and run the binary:
-
-```bash
-cd image_harden
-cargo build
-./target/debug/image_harden_cli /path/to/your/video.mp4
-```
-
-### Fuzzing
-
-The project is set up with `cargo-fuzz` for continuous fuzzing of all decoding functions:
-
-```bash
-cd image_harden
-
-# Image fuzzing
-cargo fuzz run fuzz_png
-cargo fuzz run fuzz_jpeg
-cargo fuzz run fuzz_gif
-cargo fuzz run fuzz_webp    # WebP (CVE-2023-4863)
-cargo fuzz run fuzz_heif    # HEIF/HEIC (Apple formats)
-cargo fuzz run fuzz_svg
-
-# Audio fuzzing
-cargo fuzz run fuzz_mp3
-cargo fuzz run fuzz_vorbis
-cargo fuzz run fuzz_flac
-cargo fuzz run fuzz_opus
-cargo fuzz run fuzz_audio   # Auto-detect format
-
-# Video container fuzzing
-cargo fuzz run fuzz_video_mp4
-cargo fuzz run fuzz_video_mkv
-cargo fuzz run fuzz_video_avi
-```
-
-The fuzz tests are integrated into the CI pipeline and run automatically on every push and pull request.
-
-## Security
-
-ImageHarden provides secure-by-default media decoding for both images and audio. The combination of:
-- Memory-safe Rust implementations (audio)
-- Compile-time hardening (C libraries)
-- Strict runtime validation
-- Continuous fuzzing
-- Kernel sandboxing
-
-...provides robust defense against remote code execution, buffer overflows, and malware delivery via media files.
-
-### Real-World Threat Protection
-
-This system specifically defends against:
-- **Embedded malware in audio files** (e.g., PowerShell scripts in MP3 metadata)
-- **Codec vulnerabilities** in libvorbis, libopus, libflac
-- **Parser exploits** in container formats (Ogg, MP4)
-- **Social engineering attacks** via files sent through Telegram, Discord, email
-
-### Sandboxing
-
-The `image_harden_cli` demonstration binary uses a combination of kernel namespaces, `seccomp-bpf`, and Landlock to create a sandboxed environment for image decoding. This provides an additional layer of security by isolating the decoding process from the rest of the system.
-
--   **Kernel Namespaces**: The decoding process is run in new PID, network, and mount namespaces. This means it has its own process tree, no network access, and a private filesystem view.
--   **`seccomp-bpf`**: A strict `seccomp-bpf` filter is applied to the decoding process, limiting the available system calls to only those that are absolutely necessary for decoding an image. Three different `seccomp` profiles are used: a general profile for PNG and JPEG decoding, a more restrictive profile for SVG decoding, and a profile for the Wasm runtime.
--   **Landlock**: A Landlock ruleset is applied to the decoding process, restricting its filesystem access to only the input file. This prevents a compromised decoder from accessing any other files on the system.
-
-This sandboxing approach significantly reduces the attack surface and makes it much more difficult for a compromised decoder to have any impact on the host system.
-
-## Audio Library Hardening
-
-For detailed information about audio library hardening, including threat models, implementation details, and best practices, see the [Audio Hardening Guide](AUDIO_HARDENING.md).
-
-Key highlights:
-- **Pure Rust implementations** eliminate memory safety vulnerabilities
-- **Strict validation** of file signatures, sample rates, channels, and duration
-- **Real-time limits** prevent DoS attacks from malformed audio
-- **Malware protection** against embedded payloads in audio metadata
-- **Production-ready** for processing untrusted audio from messaging apps
-
-Example use case:
 ```rust
-// Safely process audio file from Telegram voice chat
-let audio_data = std::fs::read("telegram_voice.mp3")?;
+use image_harden::formats::{avif, jxl, tiff, exr};
 
-match decode_mp3(&audio_data) {
-    Ok(decoded) => {
-        println!("Safe: {} samples, {} Hz, {} channels",
-            decoded.samples.len(),
-            decoded.sample_rate,
-            decoded.channels);
+fn decode_modern_formats() -> Result<(), ImageHardenError> {
+    // AVIF (AV1 images)
+    #[cfg(feature = "avif")]
+    {
+        let avif_data = std::fs::read("image.avif")?;
+        let decoded = avif::decode_avif(&avif_data)?;
     }
-    Err(e) => {
-        eprintln!("Malicious or malformed file detected: {}", e);
-        // Quarantine the file
+
+    // JPEG XL
+    #[cfg(feature = "jxl")]
+    {
+        let jxl_data = std::fs::read("image.jxl")?;
+        let decoded = jxl::decode_jxl(&jxl_data)?;
     }
+
+    // TIFF
+    #[cfg(feature = "tiff")]
+    {
+        let tiff_data = std::fs::read("scan.tiff")?;
+        let decoded = tiff::decode_tiff(&tiff_data)?;
+    }
+
+    // OpenEXR (HDR)
+    #[cfg(feature = "openexr")]
+    {
+        let exr_data = std::fs::read("render.exr")?;
+        let decoded = exr::decode_exr(&exr_data)?;
+    }
+
+    Ok(())
 }
 ```
 
-## Video Format Hardening
+### Example: Metadata Handling
 
-**CRITICAL**: Video files are the most dangerous attack vector, capable of VM escape and CPU desynchronization attacks.
+```rust
+use image_harden::formats::{icc, exif};
 
-For comprehensive video hardening documentation, see the [Video Hardening Guide](VIDEO_HARDENING.md).
+fn handle_metadata() -> Result<(), ImageHardenError> {
+    // Validate ICC profile
+    #[cfg(feature = "icc")]
+    {
+        let profile_data = std::fs::read("profile.icc")?;
+        let info = icc::validate_icc_profile(&profile_data)?;
+        println!("ICC version: {}.{}", info.version_major, info.version_minor);
+    }
 
-### Video Security Features
+    // Validate EXIF (or strip for privacy)
+    #[cfg(feature = "exif")]
+    {
+        let exif_data = extract_exif_from_jpeg(&jpeg_data)?;
+        let info = exif::validate_exif(&exif_data)?;
 
-- **Pre-validation**: All video containers validated BEFORE codec processing
-- **Pure Rust parsers**: MP4 (Firefox's parser), MKV/WebM (matroska), AVI (custom)
-- **Format detection**: Automatic magic byte identification
-- **Strict limits**: 4K max resolution, 1 hour max duration, 500 MB max file size
-- **WebAssembly sandbox**: FFmpeg isolated in Wasm runtime
-- **Xen support**: Enhanced hardening for Xen PV/HVM guests with graceful fallback
-- **Hardened drivers**: Kernel 6.17+ driver configs for Debian (V4L2, DRM)
+        // Strip GPS data for privacy
+        let sanitized = exif::strip_gps_from_exif(&exif_data)?;
+    }
 
-### Supported Video Formats
-
-| Format | Security Level | Parser |
-|--------|---------------|---------|
-| MP4/MOV | HIGH | mp4parse (Rust, Firefox) |
-| MKV | HIGH | matroska (Rust) |
-| WebM | HIGH | matroska (Rust) |
-| AVI | MEDIUM | Custom Rust parser |
-
-### Hardened Kernel Drivers (NEW!)
-
-For Debian with kernel 6.17+:
-
-```bash
-# Build hardened V4L2 and DRM drivers
-./build_hardened_drivers.sh
-
-# Install configurations
-sudo /opt/hardened-drivers/install-hardened-drivers.sh
-
-# Reboot
-sudo reboot
+    Ok(())
+}
 ```
 
-**Driver Hardening Features:**
-- USB video drivers DISABLED by default (manual enable only)
-- Hardware acceleration DISABLED (prevents GPU exploits)
-- DMA buffers limited to 100 MB per allocation
-- Module signing REQUIRED
-- `/dev/mem` and `/dev/kmem` DISABLED
-- Xen grant table support for safer DMA
-- Stack protection, CFI, shadow call stack (ARM64)
+---
 
-See `VIDEO_HARDENING.md` for complete driver documentation.
+## 🐛 Fuzzing
 
-## Complete Format Coverage
+IMAGEHARDER includes comprehensive fuzzing infrastructure using `cargo-fuzz`.
 
-### All Hardened Modules and Formats
+### Available Fuzz Targets
 
-**Image Formats (7 formats hardened):**
-1. **PNG** - libpng with strict limits (8192×8192, 256KB chunk cache)
-2. **JPEG** - libjpeg-turbo with 64MB memory limit, metadata stripped
-3. **GIF** - giflib with CVE-2019-15133 & CVE-2016-3977 mitigations
-4. **WebP** - webp crate with CVE-2023-4863 mitigation (50MB max, 16K dimensions)
-5. **HEIF/HEIC** - libheif-rs supporting Apple formats (heic, heix, mif1, msf1, hevc, hevx)
-6. **SVG** - resvg (pure Rust) + usvg + ammonia sanitization (100% memory-safe, XSS removal)
-7. **Video frames** - FFmpeg in WebAssembly sandbox
+#### Core Formats
+- `fuzz_png`, `fuzz_jpeg`, `fuzz_gif`
+- `fuzz_webp`, `fuzz_heif`, `fuzz_svg`
 
-**Audio Formats (5 formats hardened):**
-1. **MP3** - minimp3 (Rust wrapper, 100MB max, 192kHz max sample rate)
-2. **Vorbis** - lewton (pure Rust, 10min max duration)
-3. **FLAC** - claxon (pure Rust, bits-per-sample handling)
-4. **Opus** - opus crate (VoIP/streaming)
-5. **Ogg** - ogg crate (pure Rust container parser)
+#### Extended Formats
+- `fuzz_avif`, `fuzz_jxl`, `fuzz_tiff`, `fuzz_exr`
 
-**Video Container Formats (4 formats validated):**
-1. **MP4/MOV** - mp4parse (Firefox's Rust parser, strict mode)
-2. **MKV** - matroska crate (pure Rust EBML parser)
-3. **WebM** - matroska crate (WebM = MKV subset)
-4. **AVI** - Custom Rust parser with RIFF chunk validation
+#### Hidden-Path Components
+- `fuzz_icc`, `fuzz_exif`
 
-**Total: 16 media formats hardened** across images, audio, and video containers.
+#### Audio
+- `fuzz_mp3`, `fuzz_vorbis`, `fuzz_flac`, `fuzz_opus`
 
-### Security Validation by Format
+#### Video
+- `fuzz_video_mp4`, `fuzz_video_mkv`
 
-| Format | Magic Bytes | Max Size | Max Dimensions | CVE Mitigations |
-|--------|-------------|----------|----------------|-----------------|
-| PNG | `89 50 4E 47` | 256MB | 8192×8192 | Stack overflow, chunk bombs |
-| JPEG | `FF D8 FF` | 64MB | 10000×10000 | Memory exhaustion, DCT exploits |
-| GIF | `GIF87a/89a` | 50MB | 8192×8192 | CVE-2019-15133, CVE-2016-3977 |
-| WebP | `RIFF...WEBP` | 50MB | 16384×16384 | CVE-2023-4863 (critical) |
-| HEIF/HEIC | `ftyp+brand` | 100MB | 16384×16384 | Codec chain validation |
-| SVG | XML | 10MB | 256×256 render | XSS, external entities, scripts |
-| MP3 | `FF Ex` | 100MB | 192kHz/8ch | Metadata injection, ID3 exploits |
-| Vorbis | `OggS` | 100MB | 192kHz/8ch | Buffer overflows in codec |
-| FLAC | `fLaC` | 100MB | 192kHz/8ch | Bit-depth exploits |
-| Opus | In Ogg | 100MB | 192kHz/8ch | VoIP packet injection |
-| MP4/MOV | `ftyp` box | 500MB | 3840×2160 | Atom bomb, track overflow |
-| MKV | `1A 45 DF A3` | 500MB | 3840×2160 | EBML overflow, track bomb |
-| WebM | EBML+webm | 500MB | 3840×2160 | Same as MKV |
-| AVI | `RIFF...AVI` | 500MB | 3840×2160 | Chunk overflow, header bomb |
+### Running Fuzz Tests
 
-### Fuzz Testing Coverage
+```bash
+cd image_harden
 
-All 16 formats have dedicated fuzz targets:
-- **Image fuzz targets:** `fuzz_png`, `fuzz_jpeg`, `fuzz_gif`, `fuzz_webp`, `fuzz_heif`, `fuzz_svg`
-- **Audio fuzz targets:** `fuzz_mp3`, `fuzz_vorbis`, `fuzz_flac`, `fuzz_opus`, `fuzz_audio` (auto-detect)
-- **Video fuzz targets:** `fuzz_video_mp4`, `fuzz_video_mkv`, `fuzz_video_avi`
+# Install cargo-fuzz
+cargo install cargo-fuzz
 
-**Total fuzzing time per CI run:** 35+ minutes across all targets
+# Run a specific target
+cargo fuzz run fuzz_avif
 
-### Rejected Formats (Security Policy)
+# Run with sanitizers
+cargo fuzz run fuzz_tiff -- -max_total_time=60
 
-The following formats are **explicitly rejected** due to extreme risk:
-- **FLV (Flash Video)** - Legacy, Flash-related exploits (REJECT at firewall)
-- **SWF (Flash)** - Arbitrary code execution vector (REJECT)
-- **HTA (HTML Application)** - Malware delivery (REJECT)
+# Run all targets (CI)
+./run_all_fuzz_tests.sh
+```
 
-For guidance on adding additional formats, see `ADDITIONAL_FORMATS.md`.
+---
+
+## 🏗️ Architecture
+
+### Directory Structure
+
+```
+IMAGEHARDER/
+├── config/
+│   └── hardening-flags.mk       # Centralized hardening configuration
+├── image_harden/
+│   ├── src/
+│   │   ├── lib.rs               # Core decoding functions
+│   │   ├── formats/             # Extended format modules
+│   │   │   ├── avif.rs
+│   │   │   ├── jxl.rs
+│   │   │   ├── tiff.rs
+│   │   │   ├── exr.rs
+│   │   │   ├── icc.rs
+│   │   │   └── exif.rs
+│   │   ├── metrics.rs           # Prometheus metrics
+│   │   └── metrics_server.rs
+│   ├── fuzz/
+│   │   └── fuzz_targets/        # Fuzzing harnesses
+│   ├── build.rs                 # C library FFI binding generation
+│   └── Cargo.toml
+├── docs/
+│   └── HARDENING_EXTRAS.md      # Extended hardening specification
+├── build.sh                     # Core library builder
+├── build_extended_formats.sh    # Extended format builder
+├── build_audio.sh               # Audio codec builder
+└── build_ffmpeg_wasm.sh         # FFmpeg WASM builder
+```
+
+### Format Coverage Matrix
+
+| Format | Decoder | Hardening | Fuzzing | Sandboxing |
+|--------|---------|-----------|---------|------------|
+| PNG | libpng | ✅ | ✅ | ✅ |
+| JPEG | libjpeg-turbo | ✅ | ✅ | ✅ |
+| GIF | giflib | ✅ | ✅ | ✅ |
+| WebP | Pure Rust | ✅ | ✅ | ✅ |
+| HEIF | libheif-rs | ✅ | ✅ | ✅ |
+| SVG | resvg (Rust) | ✅ | ✅ | ✅ |
+| AVIF | libavif+dav1d | ✅ | ✅ | 🚧 |
+| JPEG XL | libjxl | ✅ | ✅ | 🚧 |
+| TIFF | libtiff | ✅ | ✅ | 🚧 |
+| OpenEXR | openexr | ✅ | ✅ | 🚧 |
+| MP3 | minimp3 (Rust) | ✅ | ✅ | ✅ |
+| Vorbis | lewton (Rust) | ✅ | ✅ | ✅ |
+| FLAC | claxon (Rust) | ✅ | ✅ | ✅ |
+| Opus | opus (Rust) | ✅ | ✅ | ✅ |
+| MP4 | mp4parse (Rust) | ✅ | ✅ | ✅ |
+| FFmpeg | WASM | ✅ | ✅ | ✅ |
+
+---
+
+## 📚 Documentation
+
+- **[HARDENING_EXTRAS.md](docs/HARDENING_EXTRAS.md)** - Extended format hardening specification
+- **[KERNEL_BUILD.md](KERNEL_BUILD.md)** - Kernel configuration for Landlock support
+- **[config/hardening-flags.mk](config/hardening-flags.mk)** - Hardening flag reference
+
+### Hardening Specification
+
+The [HARDENING_EXTRAS.md](docs/HARDENING_EXTRAS.md) document defines:
+- Extended media surface (AVIF, JXL, TIFF, OpenEXR, MPEG-TS)
+- Hidden-path component policies (ICC, EXIF, fonts)
+- CPU-tuned compilation profiles
+- Sanitizer and fuzzing configurations
+- Sandboxing models
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please ensure:
+- All C/C++ code uses hardening flags from `config/hardening-flags.mk`
+- New formats include Rust FFI wrappers with validation
+- Fuzzing targets are added for new decoders
+- Tests pass with sanitizers enabled
+
+---
+
+## 📄 License
+
+MIT License - see LICENSE file for details
+
+---
+
+## 🙏 Acknowledgments
+
+Built on:
+- VideoLAN's dav1d (AV1 decoder)
+- AOMediaCodec's libavif
+- libjxl (JPEG XL Reference Implementation)
+- Little CMS (lcms2)
+- OpenEXR (Academy Software Foundation)
+- FFmpeg Project
+- Rust ecosystem (resvg, lewton, claxon, mp4parse, matroska)
+
+---
+
+## 🔐 Security Contact
+
+For security issues, please contact: [security contact information]
+
+**CVEs Addressed**:
+- CVE-2023-4863 (WebP)
+- CVE-2019-7317, CVE-2015-8540 (libpng)
+- CVE-2018-14498 (libjpeg)
+- CVE-2019-15133, CVE-2016-3977 (giflib)
+- And many more through comprehensive hardening
+
+---
+
+**Status**: Production-Ready with Extended Format Support (v0.2.0)
+
+**Platform**: Debian-based Linux (x86-64, Intel Core Ultra 7 165H optimized)
