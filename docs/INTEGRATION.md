@@ -27,20 +27,14 @@ members = [
 ```
 
 ## 3) Call the public API
-The `api` module exposes a minimal surface that wraps the internal decoders and feature-gated formats.
+Use the hardened helpers directly. Each decoder returns either raw bytes (images/video) or `AudioData` for audio formats.
 
 ```rust
-use image_harden::api::{DecodedMedia, HardenedDecoder, MediaFormat};
+use image_harden::decode_png;
 
-fn decode_png(bytes: &[u8]) -> Result<DecodedMedia, image_harden::ImageHardenError> {
-    HardenedDecoder::decode(MediaFormat::Png, bytes)
+fn decode_png(bytes: &[u8]) -> Result<Vec<u8>, image_harden::ImageHardenError> {
+    decode_png(bytes)
 }
-```
-
-You can check what is currently compiled in (based on enabled features) at runtime:
-```rust
-let advertised = image_harden::api::supported_formats();
-assert!(advertised.contains(&"png"));
 ```
 
 ## 4) Feature flags

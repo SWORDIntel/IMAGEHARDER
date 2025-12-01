@@ -14,9 +14,6 @@ use thiserror::Error;
 pub mod metrics;
 pub mod metrics_server;
 
-// Public API surface
-pub mod api;
-
 // Extended format support
 pub mod formats;
 
