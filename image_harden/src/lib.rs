@@ -4,11 +4,11 @@
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
+use ammonia::clean;
 use std::ffi::CStr;
 use std::io::Read;
 use std::mem;
 use thiserror::Error;
-use ammonia::clean;
 
 // Metrics and monitoring modules
 pub mod metrics;
@@ -103,14 +103,24 @@ pub fn decode_png(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
 
         let info_ptr = png_create_info_struct(png_ptr);
         if info_ptr.is_null() {
-            png_destroy_read_struct(&mut (png_ptr as png_structp), std::ptr::null_mut(), std::ptr::null_mut());
+            png_destroy_read_struct(
+                &mut (png_ptr as png_structp),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            );
             return Err(ImageHardenError::NullPointer);
         }
 
         let jmp_buf_ptr = png_jmpbuf_wrapper(png_ptr) as *mut jmp_buf;
         if setjmp(mem::transmute(jmp_buf_ptr)) != 0 {
-            png_destroy_read_struct(&mut (png_ptr as png_structp), &mut (info_ptr as png_infop), std::ptr::null_mut());
-            return Err(ImageHardenError::PngError("PNG decoding failed".to_string()));
+            png_destroy_read_struct(
+                &mut (png_ptr as png_structp),
+                &mut (info_ptr as png_infop),
+                std::ptr::null_mut(),
+            );
+            return Err(ImageHardenError::PngError(
+                "PNG decoding failed".to_string(),
+            ));
         }
 
         png_set_user_limits(png_ptr, 8192, 8192);
@@ -118,7 +128,11 @@ pub fn decode_png(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
         png_set_chunk_malloc_max(png_ptr, 256 * 1024);
 
         let mut cursor = std::io::Cursor::new(data);
-        png_set_read_fn(png_ptr, &mut cursor as *mut _ as png_voidp, Some(read_data_fn));
+        png_set_read_fn(
+            png_ptr,
+            &mut cursor as *mut _ as png_voidp,
+            Some(read_data_fn),
+        );
 
         png_read_info(png_ptr, info_ptr);
 
@@ -154,7 +168,11 @@ pub fn decode_png(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
 
         png_read_image(png_ptr, row_pointers.as_mut_ptr());
 
-        png_destroy_read_struct(&mut (png_ptr as png_structp), &mut (info_ptr as png_infop), std::ptr::null_mut());
+        png_destroy_read_struct(
+            &mut (png_ptr as png_structp),
+            &mut (info_ptr as png_infop),
+            std::ptr::null_mut(),
+        );
 
         Ok(image_data)
     }
@@ -179,10 +197,16 @@ pub fn decode_jpeg(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
 
         if setjmp(err_mgr.jmp_buf.as_mut_ptr()) != 0 {
             jpeg_destroy_decompress(&mut cinfo);
-            return Err(ImageHardenError::JpegError("JPEG decoding failed".to_string()));
+            return Err(ImageHardenError::JpegError(
+                "JPEG decoding failed".to_string(),
+            ));
         }
 
-        jpeg_CreateDecompress(&mut cinfo, JPEG_LIB_VERSION as i32, std::mem::size_of::<jpeg_decompress_struct>());
+        jpeg_CreateDecompress(
+            &mut cinfo,
+            JPEG_LIB_VERSION as i32,
+            std::mem::size_of::<jpeg_decompress_struct>(),
+        );
 
         (*cinfo.mem).max_memory_to_use = 64 * 1024 * 1024; // 64 MB
         for m in 0xE0..=0xEF {
@@ -190,13 +214,14 @@ pub fn decode_jpeg(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
         }
         jpeg_save_markers(&mut cinfo, JPEG_COM as i32, 0);
 
-
         jpeg_mem_src(&mut cinfo, data.as_ptr(), data.len() as u64);
 
         jpeg_read_header(&mut cinfo, 1);
 
         if cinfo.image_width > 10000 || cinfo.image_height > 10000 {
-            return Err(ImageHardenError::JpegError("Image dimensions exceed limits".to_string()));
+            return Err(ImageHardenError::JpegError(
+                "Image dimensions exceed limits".to_string(),
+            ));
         }
         cinfo.out_color_space = J_COLOR_SPACE_JCS_RGB;
 
@@ -206,7 +231,9 @@ pub fn decode_jpeg(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
         let mut image_data = vec![0u8; row_stride * cinfo.output_height as usize];
 
         while cinfo.output_scanline < cinfo.output_height {
-            let mut buffer = [image_data.as_mut_ptr().add(cinfo.output_scanline as usize * row_stride)];
+            let mut buffer = [image_data
+                .as_mut_ptr()
+                .add(cinfo.output_scanline as usize * row_stride)];
             jpeg_read_scanlines(&mut cinfo, buffer.as_mut_ptr(), 1);
         }
 
@@ -232,7 +259,11 @@ pub fn decode_gif(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
     unsafe impl Sync for GifMemoryReader {}
 
     // GIF read function for memory buffer
-    unsafe extern "C" fn gif_read_fn(gif_file: *mut GifFileType, buf: *mut GifByteType, size: i32) -> i32 {
+    unsafe extern "C" fn gif_read_fn(
+        gif_file: *mut GifFileType,
+        buf: *mut GifByteType,
+        size: i32,
+    ) -> i32 {
         let reader = (*gif_file).UserData as *mut GifMemoryReader;
         if reader.is_null() {
             return 0;
@@ -247,11 +278,7 @@ pub fn decode_gif(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
             return 0;
         }
 
-        std::ptr::copy_nonoverlapping(
-            reader_ref.data.add(pos),
-            buf,
-            to_read,
-        );
+        std::ptr::copy_nonoverlapping(reader_ref.data.add(pos), buf, to_read);
 
         reader_ref.pos.store(pos + to_read, Ordering::Relaxed);
         to_read as i32
@@ -262,10 +289,14 @@ pub fn decode_gif(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
         return Err(ImageHardenError::GifError("File too small".to_string()));
     }
     if &data[0..3] != b"GIF" {
-        return Err(ImageHardenError::GifError("Invalid GIF signature".to_string()));
+        return Err(ImageHardenError::GifError(
+            "Invalid GIF signature".to_string(),
+        ));
     }
     if &data[3..6] != b"87a" && &data[3..6] != b"89a" {
-        return Err(ImageHardenError::GifError("Unknown GIF version".to_string()));
+        return Err(ImageHardenError::GifError(
+            "Unknown GIF version".to_string(),
+        ));
     }
 
     unsafe {
@@ -293,7 +324,10 @@ pub fn decode_gif(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
             let msg = std::ffi::CStr::from_ptr(error_info.error_msg.as_ptr())
                 .to_string_lossy()
                 .into_owned();
-            return Err(ImageHardenError::GifError(format!("Failed to open GIF: {}", msg)));
+            return Err(ImageHardenError::GifError(format!(
+                "Failed to open GIF: {}",
+                msg
+            )));
         }
 
         // Slurp GIF with comprehensive validation
@@ -302,7 +336,10 @@ pub fn decode_gif(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
                 .to_string_lossy()
                 .into_owned();
             safe_DGifClose(gif_file);
-            return Err(ImageHardenError::GifError(format!("Failed to decode GIF: {}", msg)));
+            return Err(ImageHardenError::GifError(format!(
+                "Failed to decode GIF: {}",
+                msg
+            )));
         }
 
         let gif = &*gif_file;
@@ -339,9 +376,10 @@ pub fn decode_gif(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
             // Validate color map
             if cmap.ColorCount <= 0 || cmap.ColorCount > 256 {
                 safe_DGifClose(gif_file);
-                return Err(ImageHardenError::GifError(
-                    format!("Invalid color count: {}", cmap.ColorCount)
-                ));
+                return Err(ImageHardenError::GifError(format!(
+                    "Invalid color count: {}",
+                    cmap.ColorCount
+                )));
             }
 
             if cmap.Colors.is_null() {
@@ -358,7 +396,9 @@ pub fn decode_gif(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
             // Validate bounds
             if img_left + img_width > width || img_top + img_height > height {
                 safe_DGifClose(gif_file);
-                return Err(ImageHardenError::GifError("Image out of bounds".to_string()));
+                return Err(ImageHardenError::GifError(
+                    "Image out of bounds".to_string(),
+                ));
             }
 
             // Copy pixels with bounds checking
@@ -380,10 +420,11 @@ pub fn decode_gif(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
                     // Validate color index (CVE-2019-15133 mitigation)
                     if color_idx >= cmap.ColorCount as usize {
                         safe_DGifClose(gif_file);
-                        return Err(ImageHardenError::GifError(
-                            format!("Color index {} out of range (max: {})",
-                                color_idx, cmap.ColorCount - 1)
-                        ));
+                        return Err(ImageHardenError::GifError(format!(
+                            "Color index {} out of range (max: {})",
+                            color_idx,
+                            cmap.ColorCount - 1
+                        )));
                     }
 
                     // Get color from color map
@@ -413,41 +454,52 @@ pub fn decode_webp(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
         return Err(ImageHardenError::WebPError("File too small".to_string()));
     }
     if &data[0..4] != b"RIFF" {
-        return Err(ImageHardenError::WebPError("Invalid WebP signature: missing RIFF header".to_string()));
+        return Err(ImageHardenError::WebPError(
+            "Invalid WebP signature: missing RIFF header".to_string(),
+        ));
     }
     if &data[8..12] != b"WEBP" {
-        return Err(ImageHardenError::WebPError("Invalid WebP signature: missing WEBP marker".to_string()));
+        return Err(ImageHardenError::WebPError(
+            "Invalid WebP signature: missing WEBP marker".to_string(),
+        ));
     }
 
     // Check file size matches RIFF header
     let declared_size = u32::from_le_bytes([data[4], data[5], data[6], data[7]]) as usize;
     if declared_size + 8 != data.len() {
-        return Err(ImageHardenError::WebPError(
-            format!("WebP size mismatch: declared {} bytes, got {} bytes",
-                declared_size + 8, data.len())
-        ));
+        return Err(ImageHardenError::WebPError(format!(
+            "WebP size mismatch: declared {} bytes, got {} bytes",
+            declared_size + 8,
+            data.len()
+        )));
     }
 
     // Enforce reasonable file size limit (50 MB)
     const MAX_WEBP_FILE_SIZE: usize = 50 * 1024 * 1024;
     if data.len() > MAX_WEBP_FILE_SIZE {
-        return Err(ImageHardenError::WebPError(
-            format!("WebP file too large: {} bytes (max: {})", data.len(), MAX_WEBP_FILE_SIZE)
-        ));
+        return Err(ImageHardenError::WebPError(format!(
+            "WebP file too large: {} bytes (max: {})",
+            data.len(),
+            MAX_WEBP_FILE_SIZE
+        )));
     }
 
     // Decode with webp crate
     let decoder = Decoder::new(data);
-    let decoded = decoder.decode()
+    let decoded = decoder
+        .decode()
         .ok_or_else(|| ImageHardenError::WebPError("WebP decoding failed".to_string()))?;
 
     // Validate dimensions
-    const MAX_WEBP_DIMENSION: u32 = 16384;  // 16K max dimension
+    const MAX_WEBP_DIMENSION: u32 = 16384; // 16K max dimension
     if decoded.width() > MAX_WEBP_DIMENSION || decoded.height() > MAX_WEBP_DIMENSION {
-        return Err(ImageHardenError::WebPError(
-            format!("WebP dimensions too large: {}x{} (max: {}x{})",
-                decoded.width(), decoded.height(), MAX_WEBP_DIMENSION, MAX_WEBP_DIMENSION)
-        ));
+        return Err(ImageHardenError::WebPError(format!(
+            "WebP dimensions too large: {}x{} (max: {}x{})",
+            decoded.width(),
+            decoded.height(),
+            MAX_WEBP_DIMENSION,
+            MAX_WEBP_DIMENSION
+        )));
     }
 
     // Return raw RGBA data
@@ -457,60 +509,71 @@ pub fn decode_webp(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
 // HEIF/HEIC decoder (Apple iOS/macOS format)
 // HEIF uses complex codec chains and requires careful validation
 pub fn decode_heif(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
-    use libheif_rs::{HeifContext, RgbChroma, ColorSpace};
+    use libheif_rs::{ColorSpace, HeifContext, RgbChroma};
 
     // Validate HEIF signature (ISO Base Media File Format)
     if data.len() < 12 {
         return Err(ImageHardenError::HeifError("File too small".to_string()));
     }
     if &data[4..8] != b"ftyp" {
-        return Err(ImageHardenError::HeifError("Invalid HEIF signature: missing ftyp box".to_string()));
+        return Err(ImageHardenError::HeifError(
+            "Invalid HEIF signature: missing ftyp box".to_string(),
+        ));
     }
 
     // Check for Apple brand codes (heic, heix, mif1, msf1, hevc, hevx)
     let brand = &data[8..12];
     let valid_brands = [b"heic", b"heix", b"mif1", b"msf1", b"hevc", b"hevx"];
     if !valid_brands.iter().any(|&b| brand == b) {
-        return Err(ImageHardenError::HeifError(
-            format!("Unsupported HEIF brand: {:?}", std::str::from_utf8(brand).unwrap_or("invalid"))
-        ));
+        return Err(ImageHardenError::HeifError(format!(
+            "Unsupported HEIF brand: {:?}",
+            std::str::from_utf8(brand).unwrap_or("invalid")
+        )));
     }
 
     // Enforce reasonable file size limit (100 MB)
     const MAX_HEIF_FILE_SIZE: usize = 100 * 1024 * 1024;
     if data.len() > MAX_HEIF_FILE_SIZE {
-        return Err(ImageHardenError::HeifError(
-            format!("HEIF file too large: {} bytes (max: {})", data.len(), MAX_HEIF_FILE_SIZE)
-        ));
+        return Err(ImageHardenError::HeifError(format!(
+            "HEIF file too large: {} bytes (max: {})",
+            data.len(),
+            MAX_HEIF_FILE_SIZE
+        )));
     }
 
     // Create context and read from memory
-    let ctx = HeifContext::read_from_bytes(data)
-        .map_err(|e| ImageHardenError::HeifError(format!("Failed to read HEIF context: {:?}", e)))?;
+    let ctx = HeifContext::read_from_bytes(data).map_err(|e| {
+        ImageHardenError::HeifError(format!("Failed to read HEIF context: {:?}", e))
+    })?;
 
     // Get primary image handle
-    let handle = ctx.primary_image_handle()
-        .map_err(|e| ImageHardenError::HeifError(format!("Failed to get primary image: {:?}", e)))?;
+    let handle = ctx.primary_image_handle().map_err(|e| {
+        ImageHardenError::HeifError(format!("Failed to get primary image: {:?}", e))
+    })?;
 
     // Validate dimensions
-    const MAX_HEIF_DIMENSION: u32 = 16384;  // 16K max dimension
+    const MAX_HEIF_DIMENSION: u32 = 16384; // 16K max dimension
     let width = handle.width() as u32;
     let height = handle.height() as u32;
 
     if width > MAX_HEIF_DIMENSION || height > MAX_HEIF_DIMENSION {
-        return Err(ImageHardenError::HeifError(
-            format!("HEIF dimensions too large: {}x{} (max: {}x{})",
-                width, height, MAX_HEIF_DIMENSION, MAX_HEIF_DIMENSION)
-        ));
+        return Err(ImageHardenError::HeifError(format!(
+            "HEIF dimensions too large: {}x{} (max: {}x{})",
+            width, height, MAX_HEIF_DIMENSION, MAX_HEIF_DIMENSION
+        )));
     }
 
     // Decode image to RGB
-    let image = handle.decode(ColorSpace::Rgb(RgbChroma::Rgb), None)
-        .map_err(|e| ImageHardenError::HeifError(format!("Failed to decode HEIF image: {:?}", e)))?;
+    let image = handle
+        .decode(ColorSpace::Rgb(RgbChroma::Rgb), None)
+        .map_err(|e| {
+            ImageHardenError::HeifError(format!("Failed to decode HEIF image: {:?}", e))
+        })?;
 
     // Get image planes and convert to raw bytes
     let planes = image.planes();
-    let interleaved = planes.interleaved
+    let interleaved = planes
+        .interleaved
         .ok_or_else(|| ImageHardenError::HeifError("No interleaved plane data".to_string()))?;
 
     Ok(interleaved.data.to_vec())
@@ -519,8 +582,9 @@ pub fn decode_heif(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
 // SVG wrapper using pure Rust resvg (memory-safe)
 pub fn decode_svg(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
     // Sanitize SVG to remove malicious content
-    let sanitized_svg = clean(std::str::from_utf8(data)
-        .map_err(|e| ImageHardenError::SvgError(e.to_string()))?).to_string();
+    let sanitized_svg =
+        clean(std::str::from_utf8(data).map_err(|e| ImageHardenError::SvgError(e.to_string()))?)
+            .to_string();
 
     // Parse SVG with usvg
     let opt = usvg::Options::default();
@@ -545,7 +609,8 @@ pub fn decode_svg(data: &[u8]) -> Result<Vec<u8>, ImageHardenError> {
     resvg::render(&tree, transform, &mut pixmap.as_mut());
 
     // Encode as PNG
-    pixmap.encode_png()
+    pixmap
+        .encode_png()
         .map_err(|e| ImageHardenError::SvgError(format!("Failed to encode PNG: {:?}", e)))
 }
 
@@ -567,15 +632,11 @@ pub fn decode_video(data: &[u8], _wasm_path: &str) -> Result<Vec<u8>, ImageHarde
     // Return metadata as proof of validation
     let result = format!(
         "Video validated: {:?} {}x{} {:.1}s",
-        metadata.container_format,
-        metadata.width,
-        metadata.height,
-        metadata.duration_secs
+        metadata.container_format, metadata.width, metadata.height, metadata.duration_secs
     );
 
     Ok(result.into_bytes())
 }
-
 
 extern "C" fn error_fn(png_ptr: png_structp, error_msg: png_const_charp) {
     let msg = unsafe { CStr::from_ptr(error_msg).to_string_lossy().into_owned() };
@@ -617,18 +678,18 @@ unsafe extern "C" fn jpeg_error_exit(cinfo: j_common_ptr) {
 // like Telegram, Discord, email attachments, etc.
 
 // Security limits for audio decoding
-const MAX_AUDIO_FILE_SIZE: usize = 100 * 1024 * 1024;  // 100 MB
-const MAX_AUDIO_DURATION_SECS: u64 = 600;              // 10 minutes
-const MAX_SAMPLE_RATE: u32 = 192000;                   // 192 kHz
-const MAX_CHANNELS: u16 = 8;                           // 8 channels
+const MAX_AUDIO_FILE_SIZE: usize = 100 * 1024 * 1024; // 100 MB
+const MAX_AUDIO_DURATION_SECS: u64 = 600; // 10 minutes
+const MAX_SAMPLE_RATE: u32 = 192000; // 192 kHz
+const MAX_CHANNELS: u16 = 8; // 8 channels
 
 // Audio sample output format
 #[derive(Debug, Clone)]
 pub struct AudioData {
-    pub samples: Vec<i16>,      // Interleaved samples
-    pub sample_rate: u32,       // Hz
-    pub channels: u16,          // 1=mono, 2=stereo, etc.
-    pub duration_secs: f64,     // Total duration
+    pub samples: Vec<i16>,  // Interleaved samples
+    pub sample_rate: u32,   // Hz
+    pub channels: u16,      // 1=mono, 2=stereo, etc.
+    pub duration_secs: f64, // Total duration
 }
 
 // MP3 decoder (using minimp3 - Rust wrapper around C minimp3)
@@ -638,14 +699,18 @@ pub fn decode_mp3(data: &[u8]) -> Result<AudioData, ImageHardenError> {
 
     // Validate input size
     if data.len() > MAX_AUDIO_FILE_SIZE {
-        return Err(ImageHardenError::Mp3Error(
-            format!("File too large: {} bytes (max: {})", data.len(), MAX_AUDIO_FILE_SIZE)
-        ));
+        return Err(ImageHardenError::Mp3Error(format!(
+            "File too large: {} bytes (max: {})",
+            data.len(),
+            MAX_AUDIO_FILE_SIZE
+        )));
     }
 
     // Validate MP3 signature (MPEG frame sync)
     if data.len() < 2 || (data[0] != 0xFF || (data[1] & 0xE0) != 0xE0) {
-        return Err(ImageHardenError::Mp3Error("Invalid MP3 signature".to_string()));
+        return Err(ImageHardenError::Mp3Error(
+            "Invalid MP3 signature".to_string(),
+        ));
     }
 
     let mut decoder = Decoder::new(data);
@@ -656,17 +721,24 @@ pub fn decode_mp3(data: &[u8]) -> Result<AudioData, ImageHardenError> {
 
     loop {
         match decoder.next_frame() {
-            Ok(Frame { data: samples, sample_rate: rate, channels: ch, .. }) => {
+            Ok(Frame {
+                data: samples,
+                sample_rate: rate,
+                channels: ch,
+                ..
+            }) => {
                 // Validate audio parameters
                 if rate as u32 > MAX_SAMPLE_RATE {
-                    return Err(ImageHardenError::Mp3Error(
-                        format!("Sample rate too high: {} Hz", rate)
-                    ));
+                    return Err(ImageHardenError::Mp3Error(format!(
+                        "Sample rate too high: {} Hz",
+                        rate
+                    )));
                 }
                 if ch as u16 > MAX_CHANNELS {
-                    return Err(ImageHardenError::Mp3Error(
-                        format!("Too many channels: {}", ch)
-                    ));
+                    return Err(ImageHardenError::Mp3Error(format!(
+                        "Too many channels: {}",
+                        ch
+                    )));
                 }
 
                 // Set format from first frame
@@ -679,9 +751,10 @@ pub fn decode_mp3(data: &[u8]) -> Result<AudioData, ImageHardenError> {
                 total_samples += samples.len();
                 let duration_secs = total_samples as u64 / (sample_rate as u64 * channels as u64);
                 if duration_secs > MAX_AUDIO_DURATION_SECS {
-                    return Err(ImageHardenError::Mp3Error(
-                        format!("Audio too long: {} seconds (max: {})", duration_secs, MAX_AUDIO_DURATION_SECS)
-                    ));
+                    return Err(ImageHardenError::Mp3Error(format!(
+                        "Audio too long: {} seconds (max: {})",
+                        duration_secs, MAX_AUDIO_DURATION_SECS
+                    )));
                 }
 
                 all_samples.extend_from_slice(&samples);
@@ -692,7 +765,9 @@ pub fn decode_mp3(data: &[u8]) -> Result<AudioData, ImageHardenError> {
     }
 
     if all_samples.is_empty() {
-        return Err(ImageHardenError::Mp3Error("No audio data decoded".to_string()));
+        return Err(ImageHardenError::Mp3Error(
+            "No audio data decoded".to_string(),
+        ));
     }
 
     let duration_secs = all_samples.len() as f64 / (sample_rate as f64 * channels as f64);
@@ -711,56 +786,66 @@ pub fn decode_vorbis(data: &[u8]) -> Result<AudioData, ImageHardenError> {
 
     // Validate input size
     if data.len() > MAX_AUDIO_FILE_SIZE {
-        return Err(ImageHardenError::VorbisError(
-            format!("File too large: {} bytes", data.len())
-        ));
+        return Err(ImageHardenError::VorbisError(format!(
+            "File too large: {} bytes",
+            data.len()
+        )));
     }
 
     // Validate Ogg signature
     if data.len() < 4 || &data[0..4] != b"OggS" {
-        return Err(ImageHardenError::VorbisError("Invalid Ogg signature".to_string()));
+        return Err(ImageHardenError::VorbisError(
+            "Invalid Ogg signature".to_string(),
+        ));
     }
 
     let cursor = std::io::Cursor::new(data);
-    let mut reader = OggStreamReader::new(cursor)
-        .map_err(|e| ImageHardenError::VorbisError(format!("Failed to initialize reader: {:?}", e)))?;
+    let mut reader = OggStreamReader::new(cursor).map_err(|e| {
+        ImageHardenError::VorbisError(format!("Failed to initialize reader: {:?}", e))
+    })?;
 
     // Validate audio parameters
     let sample_rate = reader.ident_hdr.audio_sample_rate;
     let channels = reader.ident_hdr.audio_channels as u16;
 
     if sample_rate > MAX_SAMPLE_RATE {
-        return Err(ImageHardenError::VorbisError(
-            format!("Sample rate too high: {} Hz", sample_rate)
-        ));
+        return Err(ImageHardenError::VorbisError(format!(
+            "Sample rate too high: {} Hz",
+            sample_rate
+        )));
     }
     if channels > MAX_CHANNELS {
-        return Err(ImageHardenError::VorbisError(
-            format!("Too many channels: {}", channels)
-        ));
+        return Err(ImageHardenError::VorbisError(format!(
+            "Too many channels: {}",
+            channels
+        )));
     }
 
     let mut all_samples = Vec::new();
     let mut total_samples = 0usize;
 
-    while let Some(packet) = reader.read_dec_packet_itl()
-        .map_err(|e| ImageHardenError::VorbisError(format!("Decode error: {:?}", e)))? {
-
+    while let Some(packet) = reader
+        .read_dec_packet_itl()
+        .map_err(|e| ImageHardenError::VorbisError(format!("Decode error: {:?}", e)))?
+    {
         total_samples += packet.len();
 
         // Check duration limit
         let duration_secs = total_samples as u64 / (sample_rate as u64 * channels as u64);
         if duration_secs > MAX_AUDIO_DURATION_SECS {
-            return Err(ImageHardenError::VorbisError(
-                format!("Audio too long: {} seconds", duration_secs)
-            ));
+            return Err(ImageHardenError::VorbisError(format!(
+                "Audio too long: {} seconds",
+                duration_secs
+            )));
         }
 
         all_samples.extend_from_slice(&packet);
     }
 
     if all_samples.is_empty() {
-        return Err(ImageHardenError::VorbisError("No audio data decoded".to_string()));
+        return Err(ImageHardenError::VorbisError(
+            "No audio data decoded".to_string(),
+        ));
     }
 
     let duration_secs = all_samples.len() as f64 / (sample_rate as f64 * channels as f64);
@@ -779,32 +864,38 @@ pub fn decode_flac(data: &[u8]) -> Result<AudioData, ImageHardenError> {
 
     // Validate input size
     if data.len() > MAX_AUDIO_FILE_SIZE {
-        return Err(ImageHardenError::FlacError(
-            format!("File too large: {} bytes", data.len())
-        ));
+        return Err(ImageHardenError::FlacError(format!(
+            "File too large: {} bytes",
+            data.len()
+        )));
     }
 
     // Validate FLAC signature
     if data.len() < 4 || &data[0..4] != b"fLaC" {
-        return Err(ImageHardenError::FlacError("Invalid FLAC signature".to_string()));
+        return Err(ImageHardenError::FlacError(
+            "Invalid FLAC signature".to_string(),
+        ));
     }
 
     let cursor = std::io::Cursor::new(data);
-    let mut reader = FlacReader::new(cursor)
-        .map_err(|e| ImageHardenError::FlacError(format!("Failed to initialize reader: {:?}", e)))?;
+    let mut reader = FlacReader::new(cursor).map_err(|e| {
+        ImageHardenError::FlacError(format!("Failed to initialize reader: {:?}", e))
+    })?;
 
     let streaminfo = reader.streaminfo();
 
     // Validate audio parameters
     if streaminfo.sample_rate > MAX_SAMPLE_RATE {
-        return Err(ImageHardenError::FlacError(
-            format!("Sample rate too high: {} Hz", streaminfo.sample_rate)
-        ));
+        return Err(ImageHardenError::FlacError(format!(
+            "Sample rate too high: {} Hz",
+            streaminfo.sample_rate
+        )));
     }
     if streaminfo.channels as u16 > MAX_CHANNELS {
-        return Err(ImageHardenError::FlacError(
-            format!("Too many channels: {}", streaminfo.channels)
-        ));
+        return Err(ImageHardenError::FlacError(format!(
+            "Too many channels: {}",
+            streaminfo.channels
+        )));
     }
 
     let mut all_samples = Vec::new();
@@ -812,8 +903,8 @@ pub fn decode_flac(data: &[u8]) -> Result<AudioData, ImageHardenError> {
     let mut sample_count = 0usize;
 
     while let Some(sample) = samples.next() {
-        let sample = sample
-            .map_err(|e| ImageHardenError::FlacError(format!("Decode error: {:?}", e)))?;
+        let sample =
+            sample.map_err(|e| ImageHardenError::FlacError(format!("Decode error: {:?}", e)))?;
 
         // Convert to i16 (FLAC can have various bit depths)
         let sample_i16 = if streaminfo.bits_per_sample <= 16 {
@@ -826,19 +917,24 @@ pub fn decode_flac(data: &[u8]) -> Result<AudioData, ImageHardenError> {
         sample_count += 1;
 
         // Check duration limit
-        let duration_secs = sample_count as u64 / (streaminfo.sample_rate as u64 * streaminfo.channels as u64);
+        let duration_secs =
+            sample_count as u64 / (streaminfo.sample_rate as u64 * streaminfo.channels as u64);
         if duration_secs > MAX_AUDIO_DURATION_SECS {
-            return Err(ImageHardenError::FlacError(
-                format!("Audio too long: {} seconds", duration_secs)
-            ));
+            return Err(ImageHardenError::FlacError(format!(
+                "Audio too long: {} seconds",
+                duration_secs
+            )));
         }
     }
 
     if all_samples.is_empty() {
-        return Err(ImageHardenError::FlacError("No audio data decoded".to_string()));
+        return Err(ImageHardenError::FlacError(
+            "No audio data decoded".to_string(),
+        ));
     }
 
-    let duration_secs = all_samples.len() as f64 / (streaminfo.sample_rate as f64 * streaminfo.channels as f64);
+    let duration_secs =
+        all_samples.len() as f64 / (streaminfo.sample_rate as f64 * streaminfo.channels as f64);
 
     Ok(AudioData {
         samples: all_samples,
@@ -862,7 +958,9 @@ pub fn decode_audio(data: &[u8]) -> Result<AudioData, ImageHardenError> {
     } else if data.len() >= 2 && data[0] == 0xFF && (data[1] & 0xE0) == 0xE0 {
         decode_mp3(data)
     } else {
-        Err(ImageHardenError::AudioError("Unknown audio format".to_string()))
+        Err(ImageHardenError::AudioError(
+            "Unknown audio format".to_string(),
+        ))
     }
 }
 
@@ -887,13 +985,13 @@ pub fn decode_audio(data: &[u8]) -> Result<AudioData, ImageHardenError> {
 // 6. Rate-limit and resource-bound all operations
 
 // Security limits for video validation
-const MAX_VIDEO_FILE_SIZE: usize = 500 * 1024 * 1024;  // 500 MB
-const MAX_VIDEO_DURATION_SECS: u64 = 3600;             // 1 hour
-const MAX_VIDEO_WIDTH: u32 = 3840;                     // 4K width
-const MAX_VIDEO_HEIGHT: u32 = 2160;                    // 4K height
-const MAX_VIDEO_FRAMERATE: u32 = 120;                  // 120 fps
-const MAX_VIDEO_BITRATE: u64 = 50_000_000;             // 50 Mbps
-const MAX_VIDEO_TRACKS: usize = 8;                     // Max audio/video/subtitle tracks
+const MAX_VIDEO_FILE_SIZE: usize = 500 * 1024 * 1024; // 500 MB
+const MAX_VIDEO_DURATION_SECS: u64 = 3600; // 1 hour
+const MAX_VIDEO_WIDTH: u32 = 3840; // 4K width
+const MAX_VIDEO_HEIGHT: u32 = 2160; // 4K height
+const MAX_VIDEO_FRAMERATE: u32 = 120; // 120 fps
+const MAX_VIDEO_BITRATE: u64 = 50_000_000; // 50 Mbps
+const MAX_VIDEO_TRACKS: usize = 8; // Max audio/video/subtitle tracks
 
 #[derive(Debug, Clone)]
 pub struct VideoMetadata {
@@ -919,14 +1017,16 @@ pub enum VideoContainerFormat {
 pub fn validate_video_container(data: &[u8]) -> Result<VideoMetadata, ImageHardenError> {
     // File size check
     if data.len() > MAX_VIDEO_FILE_SIZE {
-        return Err(ImageHardenError::VideoValidationError(
-            format!("Video file too large: {} bytes (max: {})", data.len(), MAX_VIDEO_FILE_SIZE)
-        ));
+        return Err(ImageHardenError::VideoValidationError(format!(
+            "Video file too large: {} bytes (max: {})",
+            data.len(),
+            MAX_VIDEO_FILE_SIZE
+        )));
     }
 
     if data.len() < 12 {
         return Err(ImageHardenError::VideoValidationError(
-            "Video file too small".to_string()
+            "Video file too small".to_string(),
         ));
     }
 
@@ -938,7 +1038,7 @@ pub fn validate_video_container(data: &[u8]) -> Result<VideoMetadata, ImageHarde
         VideoContainerFormat::MKV | VideoContainerFormat::WebM => validate_mkv_container(data),
         VideoContainerFormat::AVI => validate_avi_container(data),
         VideoContainerFormat::Unknown => Err(ImageHardenError::VideoValidationError(
-            "Unknown or unsupported video container format".to_string()
+            "Unknown or unsupported video container format".to_string(),
         )),
     }
 }
@@ -982,16 +1082,17 @@ fn validate_mp4_container(data: &[u8]) -> Result<VideoMetadata, ImageHardenError
     let mut cursor = Cursor::new(data);
 
     // Parse MP4 (newer API takes only cursor)
-    let context = read_mp4(&mut cursor)
-        .map_err(|e| ImageHardenError::VideoContainerError(
-            format!("MP4 parsing failed: {:?}", e)
-        ))?;
+    let context = read_mp4(&mut cursor).map_err(|e| {
+        ImageHardenError::VideoContainerError(format!("MP4 parsing failed: {:?}", e))
+    })?;
 
     // Validate track counts
     if context.tracks.len() > MAX_VIDEO_TRACKS {
-        return Err(ImageHardenError::VideoValidationError(
-            format!("Too many tracks: {} (max: {})", context.tracks.len(), MAX_VIDEO_TRACKS)
-        ));
+        return Err(ImageHardenError::VideoValidationError(format!(
+            "Too many tracks: {} (max: {})",
+            context.tracks.len(),
+            MAX_VIDEO_TRACKS
+        )));
     }
 
     let mut video_tracks = 0;
@@ -1007,18 +1108,20 @@ fn validate_mp4_container(data: &[u8]) -> Result<VideoMetadata, ImageHardenError
 
                 // Extract video dimensions from tkhd (track header)
                 if let Some(tkhd) = &track.tkhd {
-                    let width = tkhd.width >> 16;  // Fixed-point to integer
+                    let width = tkhd.width >> 16; // Fixed-point to integer
                     let height = tkhd.height >> 16;
 
                     if width > MAX_VIDEO_WIDTH {
-                        return Err(ImageHardenError::VideoValidationError(
-                            format!("Video width too large: {} (max: {})", width, MAX_VIDEO_WIDTH)
-                        ));
+                        return Err(ImageHardenError::VideoValidationError(format!(
+                            "Video width too large: {} (max: {})",
+                            width, MAX_VIDEO_WIDTH
+                        )));
                     }
                     if height > MAX_VIDEO_HEIGHT {
-                        return Err(ImageHardenError::VideoValidationError(
-                            format!("Video height too large: {} (max: {})", height, MAX_VIDEO_HEIGHT)
-                        ));
+                        return Err(ImageHardenError::VideoValidationError(format!(
+                            "Video height too large: {} (max: {})",
+                            height, MAX_VIDEO_HEIGHT
+                        )));
                     }
 
                     max_width = max_width.max(width);
@@ -1036,10 +1139,10 @@ fn validate_mp4_container(data: &[u8]) -> Result<VideoMetadata, ImageHardenError
                         max_duration = max_duration.max(duration_secs);
 
                         if duration_secs > MAX_VIDEO_DURATION_SECS as f64 {
-                            return Err(ImageHardenError::VideoValidationError(
-                                format!("Video too long: {:.1} seconds (max: {})",
-                                    duration_secs, MAX_VIDEO_DURATION_SECS)
-                            ));
+                            return Err(ImageHardenError::VideoValidationError(format!(
+                                "Video too long: {:.1} seconds (max: {})",
+                                duration_secs, MAX_VIDEO_DURATION_SECS
+                            )));
                         }
                     }
                 }
@@ -1053,7 +1156,7 @@ fn validate_mp4_container(data: &[u8]) -> Result<VideoMetadata, ImageHardenError
 
     if video_tracks == 0 {
         return Err(ImageHardenError::VideoValidationError(
-            "No video tracks found in MP4".to_string()
+            "No video tracks found in MP4".to_string(),
         ));
     }
 
@@ -1074,10 +1177,9 @@ fn validate_mkv_container(data: &[u8]) -> Result<VideoMetadata, ImageHardenError
     use std::io::Cursor;
 
     let cursor = Cursor::new(data);
-    let matroska = Matroska::open(cursor)
-        .map_err(|e| ImageHardenError::VideoContainerError(
-            format!("MKV/WebM parsing failed: {:?}", e)
-        ))?;
+    let matroska = Matroska::open(cursor).map_err(|e| {
+        ImageHardenError::VideoContainerError(format!("MKV/WebM parsing failed: {:?}", e))
+    })?;
 
     let mut video_tracks = 0;
     let mut audio_tracks = 0;
@@ -1105,15 +1207,16 @@ fn validate_mkv_container(data: &[u8]) -> Result<VideoMetadata, ImageHardenError
     }
 
     if video_tracks + audio_tracks > MAX_VIDEO_TRACKS {
-        return Err(ImageHardenError::VideoValidationError(
-            format!("Too many tracks: {} (max: {})",
-                video_tracks + audio_tracks, MAX_VIDEO_TRACKS)
-        ));
+        return Err(ImageHardenError::VideoValidationError(format!(
+            "Too many tracks: {} (max: {})",
+            video_tracks + audio_tracks,
+            MAX_VIDEO_TRACKS
+        )));
     }
 
     if video_tracks == 0 {
         return Err(ImageHardenError::VideoValidationError(
-            "No video tracks found in MKV/WebM".to_string()
+            "No video tracks found in MKV/WebM".to_string(),
         ));
     }
 
@@ -1125,10 +1228,10 @@ fn validate_mkv_container(data: &[u8]) -> Result<VideoMetadata, ImageHardenError
     };
 
     if duration_secs > MAX_VIDEO_DURATION_SECS as f64 {
-        return Err(ImageHardenError::VideoValidationError(
-            format!("MKV video too long: {:.1} seconds (max: {})",
-                duration_secs, MAX_VIDEO_DURATION_SECS)
-        ));
+        return Err(ImageHardenError::VideoValidationError(format!(
+            "MKV video too long: {:.1} seconds (max: {})",
+            duration_secs, MAX_VIDEO_DURATION_SECS
+        )));
     }
 
     Ok(VideoMetadata {
@@ -1149,7 +1252,7 @@ fn validate_avi_container(data: &[u8]) -> Result<VideoMetadata, ImageHardenError
 
     if data.len() < 12 || &data[0..4] != b"RIFF" || &data[8..12] != b"AVI " {
         return Err(ImageHardenError::VideoValidationError(
-            "Invalid AVI signature".to_string()
+            "Invalid AVI signature".to_string(),
         ));
     }
 
@@ -1157,10 +1260,11 @@ fn validate_avi_container(data: &[u8]) -> Result<VideoMetadata, ImageHardenError
     let riff_size = u32::from_le_bytes([data[4], data[5], data[6], data[7]]) as usize;
 
     if riff_size + 8 != data.len() {
-        return Err(ImageHardenError::VideoValidationError(
-            format!("AVI RIFF size mismatch: declared {} bytes, got {} bytes",
-                riff_size + 8, data.len())
-        ));
+        return Err(ImageHardenError::VideoValidationError(format!(
+            "AVI RIFF size mismatch: declared {} bytes, got {} bytes",
+            riff_size + 8,
+            data.len()
+        )));
     }
 
     // Look for 'avih' (AVI header) chunk
@@ -1171,40 +1275,51 @@ fn validate_avi_container(data: &[u8]) -> Result<VideoMetadata, ImageHardenError
     let mut duration_microsecs = 0u32;
 
     while pos + 8 <= data.len() {
-        let chunk_id = &data[pos..pos+4];
-        let chunk_size = u32::from_le_bytes([
-            data[pos+4], data[pos+5], data[pos+6], data[pos+7]
-        ]) as usize;
+        let chunk_id = &data[pos..pos + 4];
+        let chunk_size =
+            u32::from_le_bytes([data[pos + 4], data[pos + 5], data[pos + 6], data[pos + 7]])
+                as usize;
 
         if pos + 8 + chunk_size > data.len() {
-            break;  // Chunk extends past file end
+            break; // Chunk extends past file end
         }
 
         if chunk_id == b"avih" && chunk_size >= 56 {
             found_avih = true;
 
             // Parse AVI main header (56 bytes minimum)
-            let header_data = &data[pos+8..pos+8+56];
+            let header_data = &data[pos + 8..pos + 8 + 56];
             duration_microsecs = u32::from_le_bytes([
-                header_data[0], header_data[1], header_data[2], header_data[3]
+                header_data[0],
+                header_data[1],
+                header_data[2],
+                header_data[3],
             ]);
             width = u32::from_le_bytes([
-                header_data[32], header_data[33], header_data[34], header_data[35]
+                header_data[32],
+                header_data[33],
+                header_data[34],
+                header_data[35],
             ]);
             height = u32::from_le_bytes([
-                header_data[36], header_data[37], header_data[38], header_data[39]
+                header_data[36],
+                header_data[37],
+                header_data[38],
+                header_data[39],
             ]);
 
             // Validate dimensions
             if width > MAX_VIDEO_WIDTH {
-                return Err(ImageHardenError::VideoValidationError(
-                    format!("AVI width too large: {} (max: {})", width, MAX_VIDEO_WIDTH)
-                ));
+                return Err(ImageHardenError::VideoValidationError(format!(
+                    "AVI width too large: {} (max: {})",
+                    width, MAX_VIDEO_WIDTH
+                )));
             }
             if height > MAX_VIDEO_HEIGHT {
-                return Err(ImageHardenError::VideoValidationError(
-                    format!("AVI height too large: {} (max: {})", height, MAX_VIDEO_HEIGHT)
-                ));
+                return Err(ImageHardenError::VideoValidationError(format!(
+                    "AVI height too large: {} (max: {})",
+                    height, MAX_VIDEO_HEIGHT
+                )));
             }
 
             break;
@@ -1219,17 +1334,17 @@ fn validate_avi_container(data: &[u8]) -> Result<VideoMetadata, ImageHardenError
 
     if !found_avih {
         return Err(ImageHardenError::VideoValidationError(
-            "No AVI header (avih) found".to_string()
+            "No AVI header (avih) found".to_string(),
         ));
     }
 
     let duration_secs = duration_microsecs as f64 / 1_000_000.0;
 
     if duration_secs > MAX_VIDEO_DURATION_SECS as f64 {
-        return Err(ImageHardenError::VideoValidationError(
-            format!("AVI video too long: {:.1} seconds (max: {})",
-                duration_secs, MAX_VIDEO_DURATION_SECS)
-        ));
+        return Err(ImageHardenError::VideoValidationError(format!(
+            "AVI video too long: {:.1} seconds (max: {})",
+            duration_secs, MAX_VIDEO_DURATION_SECS
+        )));
     }
 
     Ok(VideoMetadata {
@@ -1237,8 +1352,8 @@ fn validate_avi_container(data: &[u8]) -> Result<VideoMetadata, ImageHardenError
         width,
         height,
         duration_secs,
-        video_tracks: 1,  // AVI typically has single video stream
-        audio_tracks: 0,  // Would need more parsing to detect
+        video_tracks: 1, // AVI typically has single video stream
+        audio_tracks: 0, // Would need more parsing to detect
         validated: true,
     })
 }
