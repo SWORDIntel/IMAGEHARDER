@@ -58,12 +58,25 @@ lazy_static = "1.4"
 tiny_http = "0.12"
 
 # =============================================================================
+# Cryptography (libsodium) - Optional feature
+# =============================================================================
+libsodium-sys = { version = "0.2", optional = true }
+sodiumoxide = { version = "0.2", optional = true }
+
+# =============================================================================
 # Build dependencies (C library bindings generation)
 # =============================================================================
 [build-dependencies]
 bindgen = "0.69"        # Generate Rust FFI bindings from C headers
 cc = "1.0"              # C compiler integration
 pkg-config = "0.3"      # Find system libraries
+
+# =============================================================================
+# Features
+# =============================================================================
+[features]
+default = []
+crypto = ["libsodium-sys", "sodiumoxide"]
 
 [[bin]]
 name = "image_harden_cli"

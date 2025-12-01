@@ -17,6 +17,10 @@ pub mod metrics_server;
 // Extended format support
 pub mod formats;
 
+// Cryptographic operations (libsodium)
+#[cfg(feature = "crypto")]
+pub mod crypto;
+
 #[derive(Debug, Error)]
 pub enum ImageHardenError {
     // =============================================================================
@@ -78,6 +82,12 @@ pub enum ImageHardenError {
     VideoContainerError(String),
     #[error("Video validation failed: {0}")]
     VideoValidationError(String),
+
+    // =============================================================================
+    // Cryptographic operations
+    // =============================================================================
+    #[error("Cryptographic operation failed: {0}")]
+    CryptoError(String),
 
     // =============================================================================
     // System errors
