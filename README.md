@@ -432,7 +432,7 @@ Built on:
 
 ## 🔐 Security Contact
 
-For security issues, please contact: [security contact information]
+For security issues, please contact: intel@swordintelligence.airforce
 
 **CVEs Addressed**:
 - CVE-2023-4863 (WebP)
