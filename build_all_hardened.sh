@@ -103,18 +103,19 @@ EOF
 done
 
 # ============================================================================
-# METEOR TRUE FLAG PROFILE (OPTIMAL for AI/ML workloads)
-# Applied to all build steps to preserve numerical precision for ML.
+# METEOR TRUE FLAG PROFILE (OPTIMAL + SECURITY for defensive workloads)
+# Combines OPTIMAL flags (preserves numerical precision) with SECURITY flags
+# (stack protection, CFI, hardening) for defensive media processing workloads.
 # ============================================================================
 load_meteor_flags() {
     local flags_file="${SCRIPT_DIR}/../../METEOR_TRUE_FLAGS.sh"
     if [ -f "${flags_file}" ]; then
         # shellcheck disable=SC1090
         source "${flags_file}"
-        export CFLAGS="${CFLAGS_OPTIMAL}"
-        export CXXFLAGS="${CXXFLAGS_OPTIMAL}"
+        export CFLAGS="${CFLAGS_OPTIMAL} ${CFLAGS_SECURITY}"
+        export CXXFLAGS="${CXXFLAGS_OPTIMAL} ${CFLAGS_SECURITY}"
         export LDFLAGS="${LDFLAGS_OPTIMAL} ${LDFLAGS_SECURITY}"
-        echo "[FLAGS] Applied METEOR TRUE OPTIMAL flags (AI/ML-safe, preserves numerical precision)"
+        echo "[FLAGS] Applied METEOR TRUE OPTIMAL + SECURITY flags (defensive workload: preserves precision + hardening)"
     else
         echo "[FLAGS] METEOR_TRUE_FLAGS.sh not found at ${flags_file}; using default hardening flags"
     fi

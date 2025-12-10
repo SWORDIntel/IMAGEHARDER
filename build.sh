@@ -15,16 +15,18 @@ sudo apt-get update && sudo apt-get install -y build-essential clang cmake nasm 
   autoconf automake libtool git pkg-config libseccomp-dev librsvg2-dev
 
 # =============================================================================
-# METEOR TRUE FLAG PROFILE (OPTIMAL for AI/ML workloads)
+# METEOR TRUE FLAG PROFILE (OPTIMAL + SECURITY for defensive workloads)
+# Combines OPTIMAL flags (preserves numerical precision) with SECURITY flags
+# (stack protection, CFI, hardening) for defensive media processing workloads.
 # =============================================================================
 load_meteor_flags() {
     local flags_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../METEOR_TRUE_FLAGS.sh"
     if [ -f "${flags_file}" ]; then
         # shellcheck disable=SC1090
         source "${flags_file}"
-        export COMMON_CFLAGS="${CFLAGS_OPTIMAL}"
+        export COMMON_CFLAGS="${CFLAGS_OPTIMAL} ${CFLAGS_SECURITY}"
         export COMMON_LDFLAGS="${LDFLAGS_OPTIMAL} ${LDFLAGS_SECURITY}"
-        echo "[FLAGS] Applied METEOR TRUE OPTIMAL flags (AI/ML-safe)"
+        echo "[FLAGS] Applied METEOR TRUE OPTIMAL + SECURITY flags (defensive workload: preserves precision + hardening)"
     else
         # Fallback to default hardening flags
         export COMMON_CFLAGS="-O2 -g -pipe -fno-omit-frame-pointer -fstack-protector-strong \
