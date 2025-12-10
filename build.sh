@@ -15,14 +15,28 @@ sudo apt-get update && sudo apt-get install -y build-essential clang cmake nasm 
   autoconf automake libtool git pkg-config libseccomp-dev librsvg2-dev
 
 # =============================================================================
-# Hardening Flags (aligned with config/hardening-flags.mk)
+# METEOR TRUE FLAG PROFILE (OPTIMAL for AI/ML workloads)
 # =============================================================================
-export COMMON_CFLAGS="-O2 -g -pipe -fno-omit-frame-pointer -fstack-protector-strong \
+load_meteor_flags() {
+    local flags_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../METEOR_TRUE_FLAGS.sh"
+    if [ -f "${flags_file}" ]; then
+        # shellcheck disable=SC1090
+        source "${flags_file}"
+        export COMMON_CFLAGS="${CFLAGS_OPTIMAL}"
+        export COMMON_LDFLAGS="${LDFLAGS_OPTIMAL} ${LDFLAGS_SECURITY}"
+        echo "[FLAGS] Applied METEOR TRUE OPTIMAL flags (AI/ML-safe)"
+    else
+        # Fallback to default hardening flags
+        export COMMON_CFLAGS="-O2 -g -pipe -fno-omit-frame-pointer -fstack-protector-strong \
 -D_FORTIFY_SOURCE=3 -fstack-clash-protection -fPIC -fPIE -fexceptions \
 -fvisibility=hidden -fno-strict-aliasing -fno-plt -fno-delete-null-pointer-checks \
 -fno-strict-overflow -fcf-protection=full"
+        export COMMON_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack,-z,separate-code -pie -Wl,--as-needed"
+        echo "[FLAGS] Using default hardening flags (METEOR_TRUE_FLAGS.sh not found)"
+    fi
+}
 
-export COMMON_LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack,-z,separate-code -pie -Wl,--as-needed"
+load_meteor_flags
 
 # CPU-specific optimizations
 case "$IMAGEHARDEN_CPU" in

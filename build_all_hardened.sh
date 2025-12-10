@@ -103,11 +103,32 @@ EOF
 done
 
 # ============================================================================
+# METEOR TRUE FLAG PROFILE (OPTIMAL for AI/ML workloads)
+# Applied to all build steps to preserve numerical precision for ML.
+# ============================================================================
+load_meteor_flags() {
+    local flags_file="${SCRIPT_DIR}/../../METEOR_TRUE_FLAGS.sh"
+    if [ -f "${flags_file}" ]; then
+        # shellcheck disable=SC1090
+        source "${flags_file}"
+        export CFLAGS="${CFLAGS_OPTIMAL}"
+        export CXXFLAGS="${CXXFLAGS_OPTIMAL}"
+        export LDFLAGS="${LDFLAGS_OPTIMAL} ${LDFLAGS_SECURITY}"
+        echo "[FLAGS] Applied METEOR TRUE OPTIMAL flags (AI/ML-safe, preserves numerical precision)"
+    else
+        echo "[FLAGS] METEOR_TRUE_FLAGS.sh not found at ${flags_file}; using default hardening flags"
+    fi
+}
+
+# ============================================================================
 # INITIALIZATION
 # ============================================================================
 
 mkdir -p "$OUTPUT_DIR"
 exec > >(tee -a "$LOG_FILE") 2>&1
+
+# Load Meteor Lake optimization flags
+load_meteor_flags
 
 echo "============================================================"
 echo "  HARDENED MEDIA STACK BUILDER"

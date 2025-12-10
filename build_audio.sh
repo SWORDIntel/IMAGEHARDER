@@ -13,12 +13,30 @@ set -e
 sudo apt-get update && sudo apt-get install -y build-essential clang cmake nasm \
   autoconf automake libtool git pkg-config libseccomp-dev libogg-dev yasm
 
-# Common hardening flags (production)
-export CFLAGS="-O2 -pipe -fstack-protector-strong -D_FORTIFY_SOURCE=3 \
+# =============================================================================
+# METEOR TRUE FLAG PROFILE (OPTIMAL for AI/ML workloads)
+# =============================================================================
+load_meteor_flags() {
+    local flags_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../METEOR_TRUE_FLAGS.sh"
+    if [ -f "${flags_file}" ]; then
+        # shellcheck disable=SC1090
+        source "${flags_file}"
+        export CFLAGS="${CFLAGS_OPTIMAL}"
+        export CXXFLAGS="${CXXFLAGS_OPTIMAL}"
+        export LDFLAGS="${LDFLAGS_OPTIMAL} ${LDFLAGS_SECURITY}"
+        echo "[FLAGS] Applied METEOR TRUE OPTIMAL flags (AI/ML-safe)"
+    else
+        # Fallback to default hardening flags
+        export CFLAGS="-O2 -pipe -fstack-protector-strong -D_FORTIFY_SOURCE=3 \
  -fstack-clash-protection -fno-strict-overflow -fno-delete-null-pointer-checks \
  -fPIE -fcf-protection=full"
-export CXXFLAGS="$CFLAGS"
-export LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack,-z,separate-code -pie"
+        export CXXFLAGS="$CFLAGS"
+        export LDFLAGS="-Wl,-z,relro,-z,now,-z,noexecstack,-z,separate-code -pie"
+        echo "[FLAGS] Using default hardening flags (METEOR_TRUE_FLAGS.sh not found)"
+    fi
+}
+
+load_meteor_flags
 
 # Initialize submodules
 git submodule update --init --recursive
