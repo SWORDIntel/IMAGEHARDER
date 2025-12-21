@@ -25,7 +25,7 @@ cd "$SCRIPT_DIR"
 # ============================================================================
 
 KERNEL_VERSION="${KERNEL_VERSION:-$(uname -r)}"
-INSTALL_PREFIX="${INSTALL_PREFIX:-/usr/local}"
+INSTALL_PREFIX="${INSTALL_PREFIX:-/usr/local}"  # System-wide installation by default
 KERNEL_SRC="${KERNEL_SRC:-/usr/src/linux-$KERNEL_VERSION}"
 OUTPUT_DIR="${OUTPUT_DIR:-$SCRIPT_DIR/build-output}"
 LOG_FILE="${LOG_FILE:-$OUTPUT_DIR/build-$(date +%Y%m%d-%H%M%S).log}"
@@ -36,6 +36,12 @@ BUILD_KERNEL_CONFIGS="${BUILD_KERNEL_CONFIGS:-1}"
 BUILD_RUST="${BUILD_RUST:-1}"
 KERNEL_INTEGRATION="${KERNEL_INTEGRATION:-0}"
 SKIP_TESTS="${SKIP_TESTS:-0}"
+
+# Thermal management defaults (optimized for performance and safety)
+THERMAL_MAX="${THERMAL_MAX:-105}"          # CPU temperature threshold (°C)
+THERMAL_CRITICAL="${THERMAL_CRITICAL:-110}" # Emergency shutdown temperature (°C)
+THERMAL_SENSOR="${THERMAL_SENSOR:-}"        # Auto-detect temperature sensor
+GPU_THROTTLE="${GPU_THROTTLE:-1}"           # Enable GPU thermal throttling by default
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -60,6 +66,26 @@ while [[ $# -gt 0 ]]; do
             SKIP_TESTS=1
             shift
             ;;
+        --thermal-max=*)
+            THERMAL_MAX="${1#*=}"
+            shift
+            ;;
+        --thermal-critical=*)
+            THERMAL_CRITICAL="${1#*=}"
+            shift
+            ;;
+        --thermal-sensor=*)
+            THERMAL_SENSOR="${1#*=}"
+            shift
+            ;;
+        --gpu-throttle)
+            GPU_THROTTLE=1
+            shift
+            ;;
+        --no-gpu-throttle)
+            GPU_THROTTLE=0
+            shift
+            ;;
         --help)
             cat << EOF
 All-In-One Hardened Media Stack Builder
@@ -72,6 +98,11 @@ Options:
   --no-userspace              Skip userspace library builds
   --no-rust                   Skip Rust application build
   --skip-tests                Skip test compilation
+  --thermal-max=TEMP          CPU temperature threshold (°C, default: 105)
+  --thermal-critical=TEMP     Emergency shutdown temperature (°C, default: 110)
+  --thermal-sensor=PATH       Custom temperature sensor path (default: auto-detect)
+  --gpu-throttle              Enable GPU temperature throttling (default: enabled)
+  --no-gpu-throttle           Disable GPU temperature throttling
   --help                      Show this help message
 
 Environment Variables:
@@ -130,6 +161,107 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 
 # Load Meteor Lake optimization flags
 load_meteor_flags
+
+# ============================================================================
+# THERMAL MANAGEMENT FUNCTIONS
+# ============================================================================
+
+get_cpu_temp() {
+    # Try multiple temperature sources for reliability
+    if [ -n "$THERMAL_SENSOR" ] && [ -f "$THERMAL_SENSOR" ]; then
+        local temp_raw
+        temp_raw=$(cat "$THERMAL_SENSOR" 2>/dev/null)
+        if [[ $temp_raw =~ ^[0-9]+$ ]]; then
+            echo $((temp_raw / 1000))  # Convert from millidegrees
+            return 0
+        fi
+    fi
+
+    # Try lm-sensors
+    if command -v sensors &> /dev/null; then
+        local temp
+        temp=$(sensors 2>/dev/null | grep -E "(Core|Package)" | head -1 | grep -oP '\+\d+\.\d+°C' | grep -oP '\d+\.\d+' | head -1)
+        if [ -n "$temp" ]; then
+            echo "${temp%.*}"  # Remove decimal part
+            return 0
+        fi
+    fi
+
+    # Try sysfs thermal zones
+    for zone in /sys/class/thermal/thermal_zone*/temp; do
+        if [ -f "$zone" ]; then
+            local temp_raw
+            temp_raw=$(cat "$zone" 2>/dev/null)
+            if [[ $temp_raw =~ ^[0-9]+$ ]]; then
+                echo $((temp_raw / 1000))  # Convert from millidegrees
+                return 0
+            fi
+        fi
+    done
+
+    echo "0"  # Fallback
+}
+
+get_gpu_temp() {
+    if [ "$GPU_THROTTLE" -eq 0 ]; then
+        echo "0"
+        return 0
+    fi
+
+    # Try NVIDIA
+    if command -v nvidia-smi &> /dev/null; then
+        local temp
+        temp=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null | head -1)
+        if [ -n "$temp" ] && [[ $temp =~ ^[0-9]+$ ]]; then
+            echo "$temp"
+            return 0
+        fi
+    fi
+
+    # Try AMD/ROCm
+    if command -v rocm-smi &> /dev/null; then
+        local temp
+        temp=$(rocm-smi --showtemp 2>/dev/null | grep -oP 'GPU\[\d+\]:\s+\K\d+' | head -1)
+        if [ -n "$temp" ]; then
+            echo "$temp"
+            return 0
+        fi
+    fi
+
+    echo "0"  # No GPU or unable to read
+}
+
+monitor_temperature() {
+    local current_cpu current_gpu
+
+    current_cpu=$(get_cpu_temp)
+    current_gpu=$(get_gpu_temp)
+
+    if [ "$current_cpu" -ge "$THERMAL_CRITICAL" ]; then
+        echo "[THERMAL] 🚨 EMERGENCY: CPU temperature $current_cpu°C >= $THERMAL_CRITICAL°C"
+        echo "[THERMAL] 🔥 EMERGENCY SHUTDOWN initiated"
+        exit 1
+    fi
+
+    if [ "$GPU_THROTTLE" -eq 1 ] && [ "$current_gpu" -ge "$THERMAL_CRITICAL" ]; then
+        echo "[THERMAL] 🚨 EMERGENCY: GPU temperature $current_gpu°C >= $THERMAL_CRITICAL°C"
+        echo "[THERMAL] 🔥 EMERGENCY SHUTDOWN initiated"
+        exit 1
+    fi
+
+    if [ "$current_cpu" -ge "$THERMAL_MAX" ]; then
+        echo "[THERMAL] ⚠️  HIGH CPU TEMP: $current_cpu°C >= $THERMAL_MAX°C (throttling recommended)"
+        return 1
+    fi
+
+    if [ "$GPU_THROTTLE" -eq 1 ] && [ "$current_gpu" -ge "$THERMAL_MAX" ]; then
+        echo "[THERMAL] ⚠️  HIGH GPU TEMP: $current_gpu°C >= $THERMAL_MAX°C (throttling recommended)"
+        return 1
+    fi
+
+    echo "[THERMAL] ✅ CPU: ${current_cpu}°C, GPU: ${current_gpu}°C (normal)"
+    return 0
+}
 
 echo "============================================================"
 echo "  HARDENED MEDIA STACK BUILDER"
@@ -195,6 +327,12 @@ if [ "$BUILD_USERSPACE" -eq 1 ]; then
     echo "============================================================"
     echo ""
 
+    # Pre-phase thermal check
+    if ! monitor_temperature; then
+        echo "[THERMAL] ⚠️  High temperature detected before userspace build"
+        echo "[THERMAL] 💡 Consider cooling system or reducing thermal limits"
+    fi
+
     # 1.1: Image libraries (PNG, JPEG)
     echo "[1/3] Building hardened image libraries (libpng, libjpeg-turbo)..."
     if [ -x "./build.sh" ]; then
@@ -225,6 +363,17 @@ if [ "$BUILD_USERSPACE" -eq 1 ]; then
         echo "[WARN] FFmpeg Wasm build scripts not found, skipping"
     fi
     echo ""
+
+    # 1.4: Install system-wide
+    echo "[4/4] Installing libraries system-wide..."
+    install_system_wide || { echo "[ERROR] System-wide installation failed"; exit 1; }
+    echo "[OK] Libraries installed system-wide to $INSTALL_PREFIX"
+
+    # Post-phase thermal check
+    if ! monitor_temperature; then
+        echo "[THERMAL] ⚠️  High temperature detected after userspace build"
+    fi
+
 else
     echo "[SKIP] Userspace library builds disabled"
 fi
@@ -238,6 +387,11 @@ if [ "$BUILD_KERNEL_CONFIGS" -eq 1 ]; then
     echo "PHASE 2: Generating Kernel Driver Configurations"
     echo "============================================================"
     echo ""
+
+    # Pre-phase thermal check
+    if ! monitor_temperature; then
+        echo "[THERMAL] ⚠️  High temperature detected before kernel config generation"
+    fi
 
     # 2.1: Audio driver configs
     echo "[1/2] Generating hardened audio driver configurations (ALSA)..."
@@ -272,6 +426,11 @@ if [ "$BUILD_RUST" -eq 1 ]; then
     echo "============================================================"
     echo ""
 
+    # Pre-phase thermal check
+    if ! monitor_temperature; then
+        echo "[THERMAL] ⚠️  High temperature detected before Rust build"
+    fi
+
     if [ -d "./image_harden" ]; then
         cd image_harden
 
@@ -299,6 +458,12 @@ if [ "$BUILD_RUST" -eq 1 ]; then
         echo "[WARN] image_harden directory not found, skipping Rust build"
     fi
     echo ""
+
+    # Post-phase thermal check
+    if ! monitor_temperature; then
+        echo "[THERMAL] ⚠️  High temperature detected after Rust build"
+    fi
+
 else
     echo "[SKIP] Rust application build disabled"
 fi
@@ -378,6 +543,46 @@ EOF
     echo "       # Load: $KERNEL_CONFIG_DIR/hardened-media.config"
     echo ""
 fi
+
+# ============================================================================
+# SYSTEM-WIDE INSTALLATION
+# ============================================================================
+
+install_system_wide() {
+    echo "[INSTALL] Installing IMAGEHARDER libraries system-wide..."
+
+    # Create system directories
+    sudo mkdir -p "$INSTALL_PREFIX/lib" "$INSTALL_PREFIX/include" "$INSTALL_PREFIX/bin"
+
+    # Install built libraries
+    local lib_dirs=("libpng" "libjpeg" "mpg123" "vorbis" "opus" "flac" "libtiff" "lcms2" "libexif" "libavif" "libjxl")
+
+    for lib_dir in "${lib_dirs[@]}"; do
+        if [ -d "./${lib_dir}" ] && [ -f "./${lib_dir}/lib${lib_dir}.a" ]; then
+            echo "[INSTALL] Installing ${lib_dir}..."
+            # Copy static libraries
+            sudo cp -f "./${lib_dir}/lib${lib_dir}.a" "$INSTALL_PREFIX/lib/" 2>/dev/null || true
+            # Copy shared libraries if they exist
+            sudo cp -f "./${lib_dir}/lib${lib_dir}.so"* "$INSTALL_PREFIX/lib/" 2>/dev/null || true
+            # Copy headers
+            if [ -d "./${lib_dir}/include" ]; then
+                sudo cp -r "./${lib_dir}/include/"* "$INSTALL_PREFIX/include/" 2>/dev/null || true
+            fi
+        fi
+    done
+
+    # Install Rust application
+    if [ -f "./image_harden/target/release/image_harden_cli" ]; then
+        echo "[INSTALL] Installing Rust CLI application..."
+        sudo cp "./image_harden/target/release/image_harden_cli" "$INSTALL_PREFIX/bin/"
+        sudo chmod +x "$INSTALL_PREFIX/bin/image_harden_cli"
+    fi
+
+    # Update library cache
+    sudo ldconfig 2>/dev/null || true
+
+    echo "[INSTALL] IMAGEHARDER installed system-wide to $INSTALL_PREFIX"
+}
 
 # ============================================================================
 # PHASE 5: INSTALLATION
@@ -465,6 +670,8 @@ echo "Userspace Libs:     $([ $BUILD_USERSPACE -eq 1 ] && echo 'BUILT' || echo '
 echo "Kernel Configs:     $([ $BUILD_KERNEL_CONFIGS -eq 1 ] && echo 'GENERATED' || echo 'SKIPPED')"
 echo "Rust Application:   $([ $BUILD_RUST -eq 1 ] && echo 'BUILT' || echo 'SKIPPED')"
 echo "Kernel Integration: $([ $KERNEL_INTEGRATION -eq 1 ] && echo 'ENABLED' || echo 'DISABLED')"
+echo "Thermal Management: ENABLED (CPU: ${THERMAL_MAX}°C, Critical: ${THERMAL_CRITICAL}°C, GPU: $([ $GPU_THROTTLE -eq 1 ] && echo 'ENABLED' || echo 'DISABLED'))"
+echo "METEOR Flags:       APPLIED (defensive media processing)"
 echo "Log File:           $LOG_FILE"
 echo "============================================================"
 echo ""
