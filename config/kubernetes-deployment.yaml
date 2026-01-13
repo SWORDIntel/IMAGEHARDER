@@ -1,0 +1,302 @@
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: media-processing
+  labels:
+    name: media-processing
+    security: hardened
+
+---
+# Service Account with minimal permissions
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: media-processor-sa
+  namespace: media-processing
+
+---
+# Pod Security Policy (Strict)
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: media-processor-psp
+spec:
+  privileged: false
+  allowPrivilegeEscalation: false
+  requiredDropCapabilities:
+    - ALL
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    - 'persistentVolumeClaim'
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  runAsUser:
+    rule: 'MustRunAsNonRoot'
+  seLinux:
+    rule: 'RunAsAny'
+  supplementalGroups:
+    rule: 'RunAsAny'
+  fsGroup:
+    rule: 'RunAsAny'
+  readOnlyRootFilesystem: true
+
+---
+# ConfigMap for configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: media-processor-config
+  namespace: media-processing
+data:
+  MAX_FILE_SIZE: "100000000"
+  MAX_PROCESSING_TIME: "300"
+  RUST_LOG: "info"
+
+---
+# PersistentVolumeClaim for input queue
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: media-queue-pvc
+  namespace: media-processing
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# PersistentVolumeClaim for processed output
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: media-output-pvc
+  namespace: media-processing
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+
+---
+# Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media-processor
+  namespace: media-processing
+  labels:
+    app: media-processor
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: media-processor
+  template:
+    metadata:
+      labels:
+        app: media-processor
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: media-processor-sa
+
+      # Security Context (Pod Level)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      # Init container (optional, for setup)
+      initContainers:
+      - name: init-permissions
+        image: busybox:latest
+        command: ['sh', '-c', 'chmod 700 /data/queue /data/output']
+        volumeMounts:
+        - name: queue
+          mountPath: /data/queue
+        - name: output
+          mountPath: /data/output
+
+      containers:
+      - name: media-processor
+        image: imageharder:latest
+        imagePullPolicy: Always
+
+        # Security Context (Container Level)
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+              - ALL
+
+        # Resource limits
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+
+        # Environment from ConfigMap
+        envFrom:
+        - configMapRef:
+            name: media-processor-config
+
+        # Volume mounts
+        volumeMounts:
+        - name: queue
+          mountPath: /data/queue
+          readOnly: true
+        - name: output
+          mountPath: /data/output
+        - name: tmp
+          mountPath: /tmp
+        - name: cache
+          mountPath: /cache
+
+        # Liveness probe
+        livenessProbe:
+          exec:
+            command:
+            - /usr/local/bin/image_harden_cli
+            - --version
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+
+        # Readiness probe
+        readinessProbe:
+          exec:
+            command:
+            - /usr/local/bin/image_harden_cli
+            - --health-check
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+      volumes:
+      - name: queue
+        persistentVolumeClaim:
+          claimName: media-queue-pvc
+      - name: output
+        persistentVolumeClaim:
+          claimName: media-output-pvc
+      - name: tmp
+        emptyDir:
+          sizeLimit: 100Mi
+      - name: cache
+        emptyDir:
+          sizeLimit: 500Mi
+
+      # Node affinity (optional)
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - media-processor
+              topologyKey: kubernetes.io/hostname
+
+---
+# HorizontalPodAutoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: media-processor-hpa
+  namespace: media-processing
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: media-processor
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+# NetworkPolicy (Strict)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: media-processor-netpol
+  namespace: media-processing
+spec:
+  podSelector:
+    matchLabels:
+      app: media-processor
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8080
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: TCP
+      port: 53  # DNS only
+
+---
+# Service (for monitoring)
+apiVersion: v1
+kind: Service
+metadata:
+  name: media-processor-service
+  namespace: media-processing
+  labels:
+    app: media-processor
+spec:
+  selector:
+    app: media-processor
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP
