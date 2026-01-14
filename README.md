@@ -150,7 +150,32 @@ sudo apt-get update && sudo apt-get install -y \
 
 ## 🔨 Build Instructions
 
-### 1. Clone and Initialize
+### Quick Start: Unified Installer (Recommended)
+
+The easiest way to install IMAGEHARDER is using the unified installer:
+
+```bash
+# Install all components
+./install.sh --all
+
+# Install specific components
+./install.sh --core --extended --rust
+
+# Interactive mode (menu-driven)
+./install.sh
+
+# With CPU profile
+IMAGEHARDEN_CPU=host ./install.sh --all
+
+# See all options
+./install.sh --help
+```
+
+### Manual Build (Advanced)
+
+If you prefer to build components individually:
+
+#### 1. Clone and Initialize
 
 ```bash
 git clone https://github.com/SWORDIntel/IMAGEHARDER.git
@@ -158,7 +183,7 @@ cd IMAGEHARDER
 git submodule update --init --recursive
 ```
 
-### 2. Build Core Libraries
+#### 2. Build Core Libraries
 
 ```bash
 # Build core image libraries (GIF, etc.)
@@ -175,14 +200,14 @@ git submodule update --init --recursive
 ./build_ffmpeg_wasm.sh
 ```
 
-### 3. Build Rust Components
+#### 3. Build Rust Components
 
 ```bash
 cd image_harden
 cargo build --release
 ```
 
-### 4. Run Tests
+#### 4. Run Tests
 
 ```bash
 cargo test --release
