@@ -446,3 +446,7 @@ For security issues, please contact: intel@swordintelligence.airforce
 **Status**: Production-Ready with Extended Format Support (v0.2.0)
 
 **Platform**: Debian-based Linux (x86-64, Intel Core Ultra 7 165H optimized)
+
+## License
+
+This project is licensed under the **SWORD Restricted Source Licence v1.0 (SRSL-1.0)**. Personal and non-commercial use is permitted under its terms; commercial exploitation requires a separate written agreement. See [LICENSE](LICENSE).
