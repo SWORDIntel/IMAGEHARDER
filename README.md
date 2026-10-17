@@ -449,4 +449,4 @@ For security issues, please contact: intel@swordintelligence.airforce
 
 ## License
 
-This project is licensed under the **SWORD Restricted Source Licence v1.0 (SRSL-1.0)**. Personal and non-commercial use is permitted under its terms; commercial exploitation requires a separate written agreement. See [LICENSE](LICENSE).
+This project is licensed under the **SWORD Restricted Source Licence v1.1 (SRSL-1.1)**. Personal and non-commercial use is permitted under its terms; commercial exploitation requires a separate written agreement. See [LICENSE](LICENSE) and [licence scope notes](SRSL_MIGRATION.md). Existing valid MIT grants in the Rust crate and historical SRSL-1.0 grants remain unaffected.
